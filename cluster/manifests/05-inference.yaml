@@ -19,7 +19,7 @@ spec:
       containers:
         - name: inference
           image: isac-inference:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           env:
             - name: OUTPUT_SERVICE
               value: "output:50054"

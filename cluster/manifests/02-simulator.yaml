@@ -21,7 +21,7 @@ spec:
       containers:
         - name: simulator
           image: isac-simulator:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           env:
             - name: INGESTION_SERVICE
               value: "ingestion:50051"

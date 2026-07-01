@@ -29,7 +29,7 @@ spec:
       containers:
         - name: preprocessing
           image: isac-preprocessing:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           env:
             - name: INFERENCE_SERVICE
               value: "inference:50053"
