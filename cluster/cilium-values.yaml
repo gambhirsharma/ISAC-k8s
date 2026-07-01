@@ -1,0 +1,11 @@
+kubeProxyReplacement: true
+l2announcements:
+  enabled: false
+hubble:
+  enabled: true
+  relay:
+    enabled: true
+  ui:
+    enabled: true
+ipam:
+  mode: kubernetes

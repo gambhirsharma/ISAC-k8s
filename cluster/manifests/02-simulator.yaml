@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: simulator
+  namespace: isac-sensing
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: simulator
+  template:
+    metadata:
+      labels:
+        app: simulator
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+    spec:
+      containers:
+        - name: simulator
+          image: isac-simulator:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: INGESTION_SERVICE
+              value: "ingestion:50051"
+            - name: METRICS_PORT
+              value: "8000"
+          ports:
+            - containerPort: 8000
+              name: metrics
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: simulator
+  namespace: isac-sensing
+spec:
+  selector:
+    app: simulator
+  ports:
+    - port: 50050
+      targetPort: 50050
+      name: grpc
+  clusterIP: None

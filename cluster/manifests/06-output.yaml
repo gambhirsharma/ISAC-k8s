@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: output
+  namespace: isac-sensing
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: output
+  template:
+    metadata:
+      labels:
+        app: output
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8004"
+    spec:
+      containers:
+        - name: output
+          image: isac-output:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: LISTEN_PORT
+              value: "50054"
+            - name: METRICS_PORT
+              value: "8004"
+          ports:
+            - containerPort: 50054
+              name: grpc
+            - containerPort: 8004
+              name: metrics
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: output
+  namespace: isac-sensing
+spec:
+  selector:
+    app: output
+  ports:
+    - port: 50054
+      targetPort: 50054
+      name: grpc

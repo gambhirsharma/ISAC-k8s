@@ -1,0 +1,40 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: isac-pipeline
+  namespace: isac-sensing
+spec:
+  endpointSelector:
+    matchLabels: {}
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            app: simulator
+      toPorts:
+        - ports:
+            - port: "50051"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            app: ingestion
+      toPorts:
+        - ports:
+            - port: "50052"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            app: preprocessing
+      toPorts:
+        - ports:
+            - port: "50053"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            app: inference
+      toPorts:
+        - ports:
+            - port: "50054"
+              protocol: TCP
+  egress:
+    - toEntities:
+        - cluster

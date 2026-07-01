@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: ingestion
+  namespace: isac-sensing
+spec:
+  selector:
+    matchLabels:
+      app: ingestion
+  template:
+    metadata:
+      labels:
+        app: ingestion
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8001"
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      nodeSelector:
+        isac-edge: "true"
+      containers:
+        - name: ingestion
+          image: isac-ingestion:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PREPROCESSING_SERVICE
+              value: "preprocessing:50052"
+            - name: LISTEN_PORT
+              value: "50051"
+            - name: METRICS_PORT
+              value: "8001"
+          ports:
+            - containerPort: 50051
+              hostPort: 50051
+              name: grpc
+            - containerPort: 8001
+              name: metrics
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ingestion
+  namespace: isac-sensing
+spec:
+  selector:
+    app: ingestion
+  ports:
+    - port: 50051
+      targetPort: 50051
+      name: grpc

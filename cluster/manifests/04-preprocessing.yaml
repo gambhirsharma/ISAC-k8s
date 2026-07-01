@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: preprocessing
+  namespace: isac-sensing
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: preprocessing
+  template:
+    metadata:
+      labels:
+        app: preprocessing
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8002"
+    spec:
+      affinity:
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - ingestion
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: preprocessing
+          image: isac-preprocessing:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: INFERENCE_SERVICE
+              value: "inference:50053"
+            - name: LISTEN_PORT
+              value: "50052"
+            - name: METRICS_PORT
+              value: "8002"
+          ports:
+            - containerPort: 50052
+              name: grpc
+            - containerPort: 8002
+              name: metrics
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: preprocessing
+  namespace: isac-sensing
+spec:
+  selector:
+    app: preprocessing
+  ports:
+    - port: 50052
+      targetPort: 50052
+      name: grpc
