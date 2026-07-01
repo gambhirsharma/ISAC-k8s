@@ -53,6 +53,8 @@ def simulate_live():
             sequence = 0
             object_present = False
             frame_interval = 1.0 / FRAME_RATE_HZ
+            window_start = time.time()
+            window_count = 0
             while running:
                 object_present = (sequence % 100) < 20
                 frame = generate_csi_frame(sequence, object_present)
@@ -61,9 +63,14 @@ def simulate_live():
                 elapsed_ms = (time.time() - start) * 1000
                 frame_counter.inc()
                 latency_hist.observe(elapsed_ms)
-                rate_gauge.set(FRAME_RATE_HZ)
                 sequence += 1
-                time.sleep(max(0, frame_interval - (time.time() - start / 1000)))
+                window_count += 1
+                now = time.time()
+                if now - window_start >= 1.0:
+                    rate_gauge.set(window_count / (now - window_start))
+                    window_start = now
+                    window_count = 0
+                time.sleep(max(0, frame_interval - (time.time() - start)))
         except grpc.RpcError as e:
             print(f"[simulator] Connection error: {e}, reconnecting...")
             stub = None

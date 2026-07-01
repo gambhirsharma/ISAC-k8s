@@ -1,0 +1,190 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasource
+  namespace: isac-sensing
+data:
+  datasource.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus:9090
+        isDefault: true
+        editable: false
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-provider
+  namespace: isac-sensing
+data:
+  provider.yaml: |
+    apiVersion: 1
+    providers:
+      - name: isac
+        orgId: 1
+        folder: ISAC
+        type: file
+        disableDeletion: true
+        updateIntervalSeconds: 30
+        options:
+          path: /var/lib/grafana/dashboards
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-isac
+  namespace: isac-sensing
+data:
+  isac-pipeline.json: |
+    {
+      "title": "ISAC Pipeline",
+      "uid": "isac-pipeline",
+      "timezone": "browser",
+      "schemaVersion": 39,
+      "refresh": "5s",
+      "time": { "from": "now-5m", "to": "now" },
+      "panels": [
+        {
+          "id": 1,
+          "title": "Simulator emit rate (Hz)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+          "targets": [
+            { "expr": "rate(simulator_frames_sent_total[1m])", "legendFormat": "frames/s (measured)" },
+            { "expr": "simulator_emit_rate_hz", "legendFormat": "emit_rate_hz (reported)" }
+          ]
+        },
+        {
+          "id": 2,
+          "title": "Ingestion forward latency (p50/p95)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+          "targets": [
+            { "expr": "histogram_quantile(0.50, rate(ingestion_forward_latency_ms_bucket[1m]))", "legendFormat": "p50" },
+            { "expr": "histogram_quantile(0.95, rate(ingestion_forward_latency_ms_bucket[1m]))", "legendFormat": "p95" }
+          ]
+        },
+        {
+          "id": 3,
+          "title": "Ingestion in-flight frames",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+          "targets": [
+            { "expr": "ingestion_in_flight", "legendFormat": "in_flight" }
+          ]
+        },
+        {
+          "id": 4,
+          "title": "Preprocessing latency (p50/p95)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+          "targets": [
+            { "expr": "histogram_quantile(0.50, rate(preprocessing_process_latency_ms_bucket[1m]))", "legendFormat": "p50" },
+            { "expr": "histogram_quantile(0.95, rate(preprocessing_process_latency_ms_bucket[1m]))", "legendFormat": "p95" }
+          ]
+        },
+        {
+          "id": 5,
+          "title": "Inference latency (p50/p95) + detections",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+          "targets": [
+            { "expr": "histogram_quantile(0.50, rate(inference_latency_ms_bucket[1m]))", "legendFormat": "latency p50" },
+            { "expr": "histogram_quantile(0.95, rate(inference_latency_ms_bucket[1m]))", "legendFormat": "latency p95" },
+            { "expr": "rate(inference_total[1m])", "legendFormat": "{{result}}" }
+          ]
+        },
+        {
+          "id": 6,
+          "title": "End-to-end latency (p50/p95/p99)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+          "targets": [
+            { "expr": "histogram_quantile(0.50, rate(output_end_to_end_latency_ms_bucket[1m]))", "legendFormat": "p50" },
+            { "expr": "histogram_quantile(0.95, rate(output_end_to_end_latency_ms_bucket[1m]))", "legendFormat": "p95" },
+            { "expr": "histogram_quantile(0.99, rate(output_end_to_end_latency_ms_bucket[1m]))", "legendFormat": "p99" }
+          ]
+        },
+        {
+          "id": 7,
+          "title": "Throughput per stage (frames/s)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 24 },
+          "targets": [
+            { "expr": "rate(simulator_frames_sent_total[1m])", "legendFormat": "simulator sent" },
+            { "expr": "rate(ingestion_frames_forwarded_total[1m])", "legendFormat": "ingestion forwarded" },
+            { "expr": "rate(preprocessing_frames_processed_total[1m])", "legendFormat": "preprocessing processed" },
+            { "expr": "rate(output_results_stored_total[1m])", "legendFormat": "output stored" }
+          ]
+        }
+      ]
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: isac-sensing
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      containers:
+        - name: grafana
+          image: grafana/grafana:11.3.0
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              value: "admin"
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              value: "admin"
+            - name: GF_AUTH_ANONYMOUS_ENABLED
+              value: "false"
+          ports:
+            - containerPort: 3000
+              name: http
+          volumeMounts:
+            - name: datasource
+              mountPath: /etc/grafana/provisioning/datasources
+            - name: dashboard-provider
+              mountPath: /etc/grafana/provisioning/dashboards
+            - name: dashboard-isac
+              mountPath: /var/lib/grafana/dashboards
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
+      volumes:
+        - name: datasource
+          configMap:
+            name: grafana-datasource
+        - name: dashboard-provider
+          configMap:
+            name: grafana-dashboard-provider
+        - name: dashboard-isac
+          configMap:
+            name: grafana-dashboard-isac
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: isac-sensing
+spec:
+  selector:
+    app: grafana
+  ports:
+    - port: 3000
+      targetPort: 3000
+      name: http

@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  namespace: isac-sensing
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: prometheus
+  namespace: isac-sensing
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: prometheus
+  namespace: isac-sensing
+subjects:
+  - kind: ServiceAccount
+    name: prometheus
+    namespace: isac-sensing
+roleRef:
+  kind: Role
+  name: prometheus
+  apiGroup: rbac.authorization.k8s.io

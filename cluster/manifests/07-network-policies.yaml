@@ -35,6 +35,28 @@ spec:
         - ports:
             - port: "50054"
               protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            app: prometheus
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
+            - port: "8001"
+              protocol: TCP
+            - port: "8002"
+              protocol: TCP
+            - port: "8003"
+              protocol: TCP
+            - port: "8004"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            app: grafana
+      toPorts:
+        - ports:
+            - port: "9090"
+              protocol: TCP
   egress:
     - toEntities:
         - cluster

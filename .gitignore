@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.env
+.venv/
+venv/
+*.swp
+*.swo
+*~
+.DS_Store
+.idea/
+.vscode/
+*.local.yaml
+/claudecode-v1.md

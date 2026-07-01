@@ -1,4 +1,4 @@
-.PHONY: all codegen proto kind-up cilium label-edge namespace build-images load-images deploy validate clean
+.PHONY: all codegen proto kind-up cilium label-edge namespace build-images load-images deploy validate clean port-forward-prometheus port-forward-grafana logs-prometheus logs-grafana
 
 all: kind-up cilium label-edge namespace build-images load-images deploy
 
@@ -60,11 +60,16 @@ deploy:
 	kubectl apply -f cluster/manifests/05-inference.yaml
 	kubectl apply -f cluster/manifests/06-output.yaml
 	kubectl apply -f cluster/manifests/07-network-policies.yaml
+	kubectl apply -f cluster/manifests/08-monitoring-rbac.yaml
+	kubectl apply -f cluster/manifests/09-prometheus.yaml
+	kubectl apply -f cluster/manifests/10-grafana.yaml
 	@echo "--- Waiting for all pods to be ready ---"
 	kubectl wait --for=condition=ready pod -l app=simulator -n isac-sensing --timeout=120s || true
 	kubectl wait --for=condition=ready pod -l app=preprocessing -n isac-sensing --timeout=120s || true
 	kubectl wait --for=condition=ready pod -l app=inference -n isac-sensing --timeout=120s || true
 	kubectl wait --for=condition=ready pod -l app=output -n isac-sensing --timeout=120s || true
+	kubectl wait --for=condition=ready pod -l app=prometheus -n isac-sensing --timeout=120s || true
+	kubectl wait --for=condition=ready pod -l app=grafana -n isac-sensing --timeout=120s || true
 	# DaemonSet doesn't have condition=ready for the controller, wait for individual pod
 	@echo "Waiting for ingestion DaemonSet..."
 	@sleep 5
@@ -96,6 +101,19 @@ logs-inference:
 
 logs-output:
 	kubectl logs -n isac-sensing -l app=output --tail=50
+
+logs-prometheus:
+	kubectl logs -n isac-sensing -l app=prometheus --tail=50
+
+logs-grafana:
+	kubectl logs -n isac-sensing -l app=grafana --tail=50
+
+# 11. Monitoring UI access
+port-forward-prometheus:
+	kubectl port-forward -n isac-sensing svc/prometheus 9090:9090
+
+port-forward-grafana:
+	kubectl port-forward -n isac-sensing svc/grafana 3000:3000
 
 # Clean up
 clean:
