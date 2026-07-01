@@ -13,9 +13,11 @@ PREPROC_TARGET = os.environ.get("PREPROCESSING_SERVICE", "localhost:50052")
 LISTEN_PORT = int(os.environ.get("LISTEN_PORT", "50051"))
 METRICS_PORT = int(os.environ.get("METRICS_PORT", "8001"))
 
+LATENCY_BUCKETS_MS = (0.5, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 250, 500, 1000, 2000)
+
 frames_received = Counter("ingestion_frames_received", "Frames received from simulator")
 frames_forwarded = Counter("ingestion_frames_forwarded", "Frames forwarded to preprocessing")
-forward_latency = Histogram("ingestion_forward_latency_ms", "Latency forwarding frame to preprocessing")
+forward_latency = Histogram("ingestion_forward_latency_ms", "Latency forwarding frame to preprocessing (includes downstream chain)", buckets=LATENCY_BUCKETS_MS)
 in_flight = Gauge("ingestion_in_flight", "Frames currently being forwarded")
 running = True
 
@@ -25,6 +27,7 @@ class IngestionServicer(isac_pb2_grpc.IngestionServiceServicer):
         self.preproc_stub = isac_pb2_grpc.PreprocessingServiceStub(self.preproc_channel)
 
     def ForwardFrame(self, request, context):
+        recv_ns = time.time_ns()
         frames_received.inc()
         in_flight.inc()
         frame = isac_pb2.CSIFrame(
@@ -32,8 +35,8 @@ class IngestionServicer(isac_pb2_grpc.IngestionServiceServicer):
             timestamp_ns=request.timestamp_ns,
             num_subcarriers=request.num_subcarriers,
             amplitudes=request.amplitudes,
-            phases=request.phases,
             ground_truth=request.ground_truth,
+            ingestion_latency_ns=time.time_ns() - recv_ns,
         )
         start = time.time()
         self.preproc_stub.ProcessFrame(frame)

@@ -25,78 +25,6 @@ if _version_not_supported:
     )
 
 
-class SimulatorServiceStub:
-    """Missing associated documentation comment in .proto file."""
-
-    def __init__(self, channel):
-        """Constructor.
-
-        Args:
-            channel: A grpc.Channel.
-        """
-        self.StreamFrames = channel.unary_stream(
-                '/isac.SimulatorService/StreamFrames',
-                request_serializer=isac__pb2.Empty.SerializeToString,
-                response_deserializer=isac__pb2.CSIFrame.FromString,
-                _registered_method=True)
-
-
-class SimulatorServiceServicer:
-    """Missing associated documentation comment in .proto file."""
-
-    def StreamFrames(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-
-def add_SimulatorServiceServicer_to_server(servicer, server):
-    rpc_method_handlers = {
-            'StreamFrames': grpc.unary_stream_rpc_method_handler(
-                    servicer.StreamFrames,
-                    request_deserializer=isac__pb2.Empty.FromString,
-                    response_serializer=isac__pb2.CSIFrame.SerializeToString,
-            ),
-    }
-    generic_handler = grpc.method_handlers_generic_handler(
-            'isac.SimulatorService', rpc_method_handlers)
-    server.add_generic_rpc_handlers((generic_handler,))
-    server.add_registered_method_handlers('isac.SimulatorService', rpc_method_handlers)
-
-
- # This class is part of an EXPERIMENTAL API.
-class SimulatorService:
-    """Missing associated documentation comment in .proto file."""
-
-    @staticmethod
-    def StreamFrames(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_stream(
-            request,
-            target,
-            '/isac.SimulatorService/StreamFrames',
-            isac__pb2.Empty.SerializeToString,
-            isac__pb2.CSIFrame.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-
 class IngestionServiceStub:
     """Missing associated documentation comment in .proto file."""
 
@@ -417,6 +345,93 @@ class OutputService:
             '/isac.OutputService/GetResultStream',
             isac__pb2.Empty.SerializeToString,
             isac__pb2.DetectionResult.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+
+class ClockSyncServiceStub:
+    """Runs alongside OutputService on the central node. Simulator (phone) probes this
+    directly, bypassing the pipeline, to estimate phone<->server clock offset — the
+    e2e latency metric subtracts request.timestamp_ns (phone clock) from time.time_ns()
+    (server clock), so the offset must be measured out-of-band and published, not derived
+    from the pipeline's own traffic.
+    """
+
+    def __init__(self, channel):
+        """Constructor.
+
+        Args:
+            channel: A grpc.Channel.
+        """
+        self.Probe = channel.unary_unary(
+                '/isac.ClockSyncService/Probe',
+                request_serializer=isac__pb2.ClockProbe.SerializeToString,
+                response_deserializer=isac__pb2.ClockProbe.FromString,
+                _registered_method=True)
+
+
+class ClockSyncServiceServicer:
+    """Runs alongside OutputService on the central node. Simulator (phone) probes this
+    directly, bypassing the pipeline, to estimate phone<->server clock offset — the
+    e2e latency metric subtracts request.timestamp_ns (phone clock) from time.time_ns()
+    (server clock), so the offset must be measured out-of-band and published, not derived
+    from the pipeline's own traffic.
+    """
+
+    def Probe(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+
+def add_ClockSyncServiceServicer_to_server(servicer, server):
+    rpc_method_handlers = {
+            'Probe': grpc.unary_unary_rpc_method_handler(
+                    servicer.Probe,
+                    request_deserializer=isac__pb2.ClockProbe.FromString,
+                    response_serializer=isac__pb2.ClockProbe.SerializeToString,
+            ),
+    }
+    generic_handler = grpc.method_handlers_generic_handler(
+            'isac.ClockSyncService', rpc_method_handlers)
+    server.add_generic_rpc_handlers((generic_handler,))
+    server.add_registered_method_handlers('isac.ClockSyncService', rpc_method_handlers)
+
+
+ # This class is part of an EXPERIMENTAL API.
+class ClockSyncService:
+    """Runs alongside OutputService on the central node. Simulator (phone) probes this
+    directly, bypassing the pipeline, to estimate phone<->server clock offset — the
+    e2e latency metric subtracts request.timestamp_ns (phone clock) from time.time_ns()
+    (server clock), so the offset must be measured out-of-band and published, not derived
+    from the pipeline's own traffic.
+    """
+
+    @staticmethod
+    def Probe(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/isac.ClockSyncService/Probe',
+            isac__pb2.ClockProbe.SerializeToString,
+            isac__pb2.ClockProbe.FromString,
             options,
             channel_credentials,
             insecure,

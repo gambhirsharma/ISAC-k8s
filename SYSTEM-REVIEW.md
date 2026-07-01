@@ -1,3 +1,5 @@
+> **Status: fixes applied.** C1–C5, H1–H2, M1, M4–M7, M9, L1 addressed in code/manifests — see [README.md § Latency-review fixes](README.md#latency-review-fixes) for what changed and where. M3 (dropped frame still Acked upstream) left as-is — intentional per the project's no-buffering/drop-don't-fail design, already surfaced via `preprocessing_frames_dropped_total`. H3/H4/M2/M8 are validity/infra limitations not fixable in code — tracked as open in the README section.
+
 # ISAC-k8s System Review — Latency Focus
 
 **Scope:** 5-stage gRPC ISAC sensing pipeline (`simulator → ingestion → preprocessing → inference → output`) on a single k3s cluster, with an Android phone (Termux, `isac-edge=true`) as a real edge worker running the first three stages and a central server running the last two. **Evaluation criterion: end-to-end sensing latency across the WiFi edge hop.**

@@ -31,6 +31,8 @@ spec:
     - fromEndpoints:
         - matchLabels:
             app: inference
+        - matchLabels:
+            app: simulator
       toPorts:
         - ports:
             - port: "50054"

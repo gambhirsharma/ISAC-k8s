@@ -69,6 +69,23 @@ make deploy CONTEXT=k3s-isac EDGE_NODE_NAME=android-edge-01 REGISTRY=192.168.1.5
 - `output.py` — latency calc (`time.time_ns() - request.timestamp_ns`) unchanged in code, but see **Clock sync** below — it's now clock-skew sensitive since the timestamp originates on the phone.
 - `07-network-policies.yaml` (beyond the Prometheus selector fix above) — `CiliumNetworkPolicy`; only applies if you install Cilium (skip it if you take the flannel fallback).
 
+## Latency-review fixes
+
+Following a latency-focused audit ([`SYSTEM-REVIEW.md`](SYSTEM-REVIEW.md)), the pipeline was changed to make the latency numbers trustworthy and to stop the phone-hop round trip from throttling the whole pipeline:
+
+- **Decoupled the WiFi hop (`preprocessing.py`).** `ProcessFrame` used to block on the full `inference.Detect` round trip before returning to `ingestion`, so the simulator could never emit faster than `1 / round_trip_latency`. It now does local preprocessing synchronously, pushes the frame onto a bounded queue (`DISPATCH_QUEUE_SIZE`, default 50), and returns immediately; a background worker thread drains the queue and calls `inference.Detect`. A full queue drops the frame (`preprocessing_frames_dropped_total{reason="queue_full"}`) instead of blocking. `INFERENCE_TIMEOUT_S` default dropped to 0.05s and reconnect-on-error is now only triggered by `UNAVAILABLE`, not `DEADLINE_EXCEEDED` — a mere timeout no longer pays for a fresh TCP/HTTP2 handshake.
+- **Isolated the WiFi-hop metric.** New `preprocessing_inference_rpc_latency_ms` histogram times only the `Detect` RPC — this is the number that answers "what does the phone↔server hop cost," separate from local compute at either end.
+- **Clock-skew correction.** New `ClockSyncService` (on `output`) + a background probe loop in `simulator` estimate the phone↔server clock offset (NTP-style, min-RTT of `CLOCK_SYNC_SAMPLES` per round) and publish `simulator_clock_offset_ms` / `simulator_clock_sync_rtt_ms`. `output_end_to_end_latency_ms` was renamed to `output_end_to_end_latency_raw_ms` to make clear it is **not** skew-corrected; Grafana Panel 10 subtracts the offset gauge from it.
+- **Custom histogram buckets** (`0.5ms`–`2000ms`) on every latency histogram in all 5 services — the previous `prometheus_client` defaults clip at 10ms, which silently broke `histogram_quantile` p95/p99 the moment latency crossed that line.
+- **Per-stage latency now reaches `DetectionResult`.** `ingestion_latency_ns`/`preprocessing_latency_ns` were declared in the proto but never populated; `CSIFrame` and `PreprocessedFrame` now carry each stage's own local timing forward instead of losing it.
+- **Detection accuracy is now measurable.** `ground_truth` was dropped at the `preprocessing` boundary; it's now carried through to `inference`, which emits `inference_detection_confusion_total{ground_truth,detected}` (Grafana Panel 11: precision/recall). Previously there was no way to tell whether the detector detected anything real.
+- **Dead code removed.** `SimulatorService.StreamFrames` (proto) and the unused `simulator` headless Service (`:50050`) — `simulator` has no gRPC server, only a metrics endpoint.
+- **Readiness/liveness probes** added to all 5 workloads (`tcpSocket` on each gRPC/metrics port) so a rollout's first frames don't hit the retry path before the pod is actually accepting connections.
+- **Prometheus scrape interval** 5s → 2s — reduces (does not eliminate) aliasing against the 100Hz frame rate on gauges like `preprocessing_dispatch_queue_depth`.
+- **`CiliumNetworkPolicy`** updated: `simulator` now also allowed to reach `output:50054` directly (the clock-sync probe bypasses the pipeline chain on purpose, so its ingress rule is separate from the `inference → output` rule).
+
+Not fixed by code (need infra/hardware, tracked in `SYSTEM-REVIEW.md` §6): true NTP/PTP hard sync between the two hosts (the offset gauge is a monitored estimate, not a fix); CSI realism (still synthetic Gaussian, no real Doppler/multipath); VXLAN/Cilium encapsulation overhead on the WiFi hop is unmeasured; no statistical repetition/CI across runs yet.
+
 ## Setup — steps outside this repo (manual, not scriptable)
 
 ### 1. Stand up k3s

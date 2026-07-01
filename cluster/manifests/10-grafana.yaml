@@ -99,13 +99,13 @@ data:
         },
         {
           "id": 6,
-          "title": "End-to-end latency (p50/p95/p99)",
+          "title": "E2E latency, raw (p50/p95/p99) — NOT clock-skew corrected",
           "type": "timeseries",
           "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
           "targets": [
-            { "expr": "histogram_quantile(0.50, rate(output_end_to_end_latency_ms_bucket[1m]))", "legendFormat": "p50" },
-            { "expr": "histogram_quantile(0.95, rate(output_end_to_end_latency_ms_bucket[1m]))", "legendFormat": "p95" },
-            { "expr": "histogram_quantile(0.99, rate(output_end_to_end_latency_ms_bucket[1m]))", "legendFormat": "p99" }
+            { "expr": "histogram_quantile(0.50, rate(output_end_to_end_latency_raw_ms_bucket[1m]))", "legendFormat": "p50 raw" },
+            { "expr": "histogram_quantile(0.95, rate(output_end_to_end_latency_raw_ms_bucket[1m]))", "legendFormat": "p95 raw" },
+            { "expr": "histogram_quantile(0.99, rate(output_end_to_end_latency_raw_ms_bucket[1m]))", "legendFormat": "p99 raw" }
           ]
         },
         {
@@ -116,8 +116,60 @@ data:
           "targets": [
             { "expr": "rate(simulator_frames_sent_total[1m])", "legendFormat": "simulator sent" },
             { "expr": "rate(ingestion_frames_forwarded_total[1m])", "legendFormat": "ingestion forwarded" },
-            { "expr": "rate(preprocessing_frames_processed_total[1m])", "legendFormat": "preprocessing processed" },
+            { "expr": "rate(preprocessing_frames_processed_total[1m])", "legendFormat": "preprocessing processed (local, decoupled from WiFi hop)" },
             { "expr": "rate(output_results_stored_total[1m])", "legendFormat": "output stored" }
+          ]
+        },
+        {
+          "id": 8,
+          "title": "WiFi hop latency: preprocessing -> inference Detect RPC (p50/p95/p99)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 32 },
+          "targets": [
+            { "expr": "histogram_quantile(0.50, rate(preprocessing_inference_rpc_latency_ms_bucket[1m]))", "legendFormat": "p50" },
+            { "expr": "histogram_quantile(0.95, rate(preprocessing_inference_rpc_latency_ms_bucket[1m]))", "legendFormat": "p95" },
+            { "expr": "histogram_quantile(0.99, rate(preprocessing_inference_rpc_latency_ms_bucket[1m]))", "legendFormat": "p99" }
+          ]
+        },
+        {
+          "id": 9,
+          "title": "Phone<->server clock offset & sync RTT",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 32 },
+          "targets": [
+            { "expr": "simulator_clock_offset_ms", "legendFormat": "offset (server - phone) ms" },
+            { "expr": "simulator_clock_sync_rtt_ms", "legendFormat": "sync probe RTT ms" }
+          ]
+        },
+        {
+          "id": 10,
+          "title": "E2E latency, skew-corrected estimate (raw p50/p95/p99 minus clock offset)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 40 },
+          "targets": [
+            { "expr": "histogram_quantile(0.50, rate(output_end_to_end_latency_raw_ms_bucket[1m])) - simulator_clock_offset_ms", "legendFormat": "p50 corrected" },
+            { "expr": "histogram_quantile(0.95, rate(output_end_to_end_latency_raw_ms_bucket[1m])) - simulator_clock_offset_ms", "legendFormat": "p95 corrected" },
+            { "expr": "histogram_quantile(0.99, rate(output_end_to_end_latency_raw_ms_bucket[1m])) - simulator_clock_offset_ms", "legendFormat": "p99 corrected" }
+          ]
+        },
+        {
+          "id": 11,
+          "title": "Detection accuracy vs ground truth (precision / recall)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 40 },
+          "targets": [
+            { "expr": "sum(rate(inference_detection_confusion_total{ground_truth=\"true\",detected=\"true\"}[1m])) / sum(rate(inference_detection_confusion_total{detected=\"true\"}[1m]))", "legendFormat": "precision" },
+            { "expr": "sum(rate(inference_detection_confusion_total{ground_truth=\"true\",detected=\"true\"}[1m])) / sum(rate(inference_detection_confusion_total{ground_truth=\"true\"}[1m]))", "legendFormat": "recall" }
+          ]
+        },
+        {
+          "id": 12,
+          "title": "Frames dropped by reason (rate/s) + dispatch queue depth",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 48 },
+          "targets": [
+            { "expr": "sum by (reason) (rate(preprocessing_frames_dropped_total[1m]))", "legendFormat": "dropped: {{reason}}" },
+            { "expr": "preprocessing_dispatch_queue_depth", "legendFormat": "dispatch queue depth" }
           ]
         }
       ]

@@ -30,6 +30,16 @@ spec:
           ports:
             - containerPort: 8000
               name: metrics
+          readinessProbe:
+            tcpSocket:
+              port: 8000
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
           resources:
             requests:
               cpu: "100m"
@@ -37,17 +47,3 @@ spec:
             limits:
               cpu: "200m"
               memory: "128Mi"
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: simulator
-  namespace: isac-sensing
-spec:
-  selector:
-    app: simulator
-  ports:
-    - port: 50050
-      targetPort: 50050
-      name: grpc
-  clusterIP: None

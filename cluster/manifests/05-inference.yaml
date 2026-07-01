@@ -32,6 +32,16 @@ spec:
               name: grpc
             - containerPort: 8003
               name: metrics
+          readinessProbe:
+            tcpSocket:
+              port: 50053
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: 50053
+            initialDelaySeconds: 5
+            periodSeconds: 10
           resources:
             requests:
               cpu: "200m"
