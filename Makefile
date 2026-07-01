@@ -3,6 +3,11 @@
 	port-forward-prometheus port-forward-grafana
 
 # --- cluster config (override on the command line, e.g. `make deploy REGISTRY=192.168.1.50:5000`) ---
+# REGISTRY defaults to localhost:5000 which ONLY resolves on the box running the
+# registry container — fine for single-node dev, but any additional node (edge or
+# otherwise) needs this overridden to an address reachable from every node (we use
+# the server's public IP, 88.99.249.172:5000, with insecure-registry trust configured
+# in both /etc/docker/daemon.json and /etc/rancher/k3s/registries.yaml on the server).
 CONTEXT ?= k3s-isac
 EDGE_NODE_NAME ?= android-edge-01
 REGISTRY ?= localhost:5000
