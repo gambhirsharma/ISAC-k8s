@@ -16,6 +16,8 @@ spec:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8000"
     spec:
+      nodeSelector:
+        isac-edge: "true"
       containers:
         - name: simulator
           image: isac-simulator:latest

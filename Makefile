@@ -1,4 +1,10 @@
-.PHONY: all codegen proto kind-up cilium label-edge namespace build-images load-images deploy validate clean port-forward-prometheus port-forward-grafana logs-prometheus logs-grafana
+.PHONY: all codegen proto kind-up cilium label-edge namespace build-images load-images deploy validate clean port-forward-prometheus port-forward-grafana logs-prometheus logs-grafana \
+	k3s-context k3s-cilium label-edge-k3s edge-namespace build-images-multiarch edge-deploy edge-validate edge-smoke-test edge-clean
+
+# --- k3s edge cluster config (override on the command line, e.g. `make edge-deploy EDGE_NODE_NAME=my-phone`) ---
+K3S_CONTEXT ?= k3s-isac
+EDGE_NODE_NAME ?= android-edge-01
+REGISTRY ?= localhost:5000
 
 all: kind-up cilium label-edge namespace build-images load-images deploy
 
@@ -120,3 +126,76 @@ clean:
 	kind delete cluster --name isac || true
 	docker rmi isac-simulator:latest isac-ingestion:latest isac-preprocessing:latest isac-inference:latest isac-output:latest 2>/dev/null || true
 	rm -f services/proto/isac_pb2.py services/proto/isac_pb2_grpc.py
+
+# =====================================================================
+# k3s edge cluster targets — phone as a real k3s node. Separate cluster
+# and context from KIND; nothing above this line touches K3S_CONTEXT.
+# =====================================================================
+
+# Sanity check the context exists before running anything against it
+k3s-context:
+	kubectl config get-contexts $(K3S_CONTEXT)
+
+# Install Cilium on the k3s cluster (skip this + 07-network-policies.yaml
+# if you took the flannel fallback from the plan)
+k3s-cilium: codegen
+	helm repo add cilium https://helm.cilium.io/
+	helm upgrade --install cilium cilium/cilium \
+	  --kube-context $(K3S_CONTEXT) \
+	  --namespace kube-system \
+	  --values cluster/cilium-values.yaml \
+	  --wait \
+	  --timeout 15m
+	kubectl --context $(K3S_CONTEXT) wait --for=condition=ready pod -l k8s-app=cilium -n kube-system --timeout=300s
+
+# Label the phone's k3s node (join it first with `k3s agent ... --node-name $(EDGE_NODE_NAME)`)
+label-edge-k3s:
+	kubectl --context $(K3S_CONTEXT) label node $(EDGE_NODE_NAME) isac-edge=true --overwrite
+
+edge-namespace:
+	kubectl --context $(K3S_CONTEXT) apply -f cluster/manifests/01-namespace.yaml
+
+# Multi-arch build + push (k3s has no `kind load docker-image` — needs a
+# registry reachable from the phone, e.g. one on the k3s server host)
+build-images-multiarch: codegen
+	@echo "Building + pushing multi-arch images to $(REGISTRY)..."
+	cd services && docker buildx build --platform linux/amd64,linux/arm64 -t $(REGISTRY)/isac-simulator:latest -f simulator/Dockerfile --push .
+	cd services && docker buildx build --platform linux/amd64,linux/arm64 -t $(REGISTRY)/isac-ingestion:latest -f ingestion/Dockerfile --push .
+	cd services && docker buildx build --platform linux/amd64,linux/arm64 -t $(REGISTRY)/isac-preprocessing:latest -f preprocessing/Dockerfile --push .
+	cd services && docker buildx build --platform linux/amd64,linux/arm64 -t $(REGISTRY)/isac-inference:latest -f inference/Dockerfile --push .
+	cd services && docker buildx build --platform linux/amd64,linux/arm64 -t $(REGISTRY)/isac-output:latest -f output/Dockerfile --push .
+
+# Deploy the full pipeline to the k3s cluster (phone must already be Ready — see Phase 6)
+edge-deploy:
+	kubectl --context $(K3S_CONTEXT) apply -f cluster/manifests/02-simulator.yaml
+	kubectl --context $(K3S_CONTEXT) apply -f cluster/manifests/03-ingestion.yaml
+	kubectl --context $(K3S_CONTEXT) apply -f cluster/manifests/04-preprocessing.yaml
+	kubectl --context $(K3S_CONTEXT) apply -f cluster/manifests/05-inference.yaml
+	kubectl --context $(K3S_CONTEXT) apply -f cluster/manifests/06-output.yaml
+	kubectl --context $(K3S_CONTEXT) apply -f cluster/manifests/07-network-policies.yaml || true
+	kubectl --context $(K3S_CONTEXT) apply -f cluster/manifests/08-monitoring-rbac.yaml
+	kubectl --context $(K3S_CONTEXT) apply -f cluster/manifests/09-prometheus.yaml
+	kubectl --context $(K3S_CONTEXT) apply -f cluster/manifests/10-grafana.yaml
+	@echo "--- Waiting for pods (phone node may be slower than KIND) ---"
+	kubectl --context $(K3S_CONTEXT) wait --for=condition=ready pod -l app=simulator -n isac-sensing --timeout=180s || true
+	kubectl --context $(K3S_CONTEXT) wait --for=condition=ready pod -l app=preprocessing -n isac-sensing --timeout=180s || true
+	kubectl --context $(K3S_CONTEXT) wait --for=condition=ready pod -l app=inference -n isac-sensing --timeout=120s || true
+	kubectl --context $(K3S_CONTEXT) wait --for=condition=ready pod -l app=output -n isac-sensing --timeout=120s || true
+	kubectl --context $(K3S_CONTEXT) get pods -n isac-sensing -o wide
+
+# Check placement: simulator/ingestion/preprocessing on the phone, inference/output central
+edge-validate:
+	@echo "=== Pod placement ==="
+	kubectl --context $(K3S_CONTEXT) get pods -n isac-sensing -o wide
+	@echo ""
+	@echo "=== Nodes, arch, edge label ==="
+	kubectl --context $(K3S_CONTEXT) get nodes -o wide --show-labels | grep -E 'isac-edge|ARCH'
+
+# Phase 6 step 3: throwaway pod on the phone before trusting it with real services
+edge-smoke-test:
+	kubectl --context $(K3S_CONTEXT) run edge-smoke --rm -it --restart=Never \
+	  --image=busybox --overrides='{"spec":{"nodeSelector":{"isac-edge":"true"}}}' \
+	  -- echo "phone node reachable"
+
+edge-clean:
+	kubectl --context $(K3S_CONTEXT) delete namespace isac-sensing --ignore-not-found
