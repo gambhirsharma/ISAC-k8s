@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\nisac.proto\x12\x04isac\"\x07\n\x05\x45mpty\"\x11\n\x03\x41\x63k\x12\n\n\x02ok\x18\x01 \x01(\x08\"\x85\x01\n\x08\x43SIFrame\x12\x10\n\x08sequence\x18\x01 \x01(\x03\x12\x14\n\x0ctimestamp_ns\x18\x02 \x01(\x03\x12\x17\n\x0fnum_subcarriers\x18\x03 \x01(\x05\x12\x12\n\namplitudes\x18\x04 \x03(\x01\x12\x0e\n\x06phases\x18\x05 \x03(\x01\x12\x14\n\x0cground_truth\x18\x06 \x01(\x08\"\xa5\x01\n\x11PreprocessedFrame\x12\x10\n\x08sequence\x18\x01 \x01(\x03\x12\x14\n\x0ctimestamp_ns\x18\x02 \x01(\x03\x12\x16\n\x0emean_amplitude\x18\x03 \x01(\x01\x12\x1a\n\x12variance_amplitude\x18\x04 \x01(\x01\x12\x1b\n\x13max_amplitude_delta\x18\x05 \x01(\x01\x12\x17\n\x0fnum_subcarriers\x18\x06 \x01(\x03\"\xc4\x01\n\x0f\x44\x65tectionResult\x12\x10\n\x08sequence\x18\x01 \x01(\x03\x12\x14\n\x0ctimestamp_ns\x18\x02 \x01(\x03\x12\x17\n\x0fobject_detected\x18\x03 \x01(\x08\x12\x12\n\nconfidence\x18\x04 \x01(\x01\x12\x1c\n\x14ingestion_latency_ns\x18\x05 \x01(\x03\x12 \n\x18preprocessing_latency_ns\x18\x06 \x01(\x03\x12\x1c\n\x14inference_latency_ns\x18\x07 \x01(\x03\x32\x41\n\x10SimulatorService\x12-\n\x0cStreamFrames\x12\x0b.isac.Empty\x1a\x0e.isac.CSIFrame0\x01\x32=\n\x10IngestionService\x12)\n\x0c\x46orwardFrame\x12\x0e.isac.CSIFrame\x1a\t.isac.Ack2O\n\x14PreprocessingService\x12\x37\n\x0cProcessFrame\x12\x0e.isac.CSIFrame\x1a\x17.isac.PreprocessedFrame2L\n\x10InferenceService\x12\x38\n\x06\x44\x65tect\x12\x17.isac.PreprocessedFrame\x1a\x15.isac.DetectionResult2{\n\rOutputService\x12\x31\n\x0bStoreResult\x12\x15.isac.DetectionResult\x1a\x0b.isac.Empty\x12\x37\n\x0fGetResultStream\x12\x0b.isac.Empty\x1a\x15.isac.DetectionResult0\x01\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\nisac.proto\x12\x04isac\"\x07\n\x05\x45mpty\"\x11\n\x03\x41\x63k\x12\n\n\x02ok\x18\x01 \x01(\x08\"T\n\nClockProbe\x12\x16\n\x0e\x63lient_send_ns\x18\x01 \x01(\x03\x12\x16\n\x0eserver_recv_ns\x18\x02 \x01(\x03\x12\x16\n\x0eserver_send_ns\x18\x03 \x01(\x03\"\x99\x01\n\x08\x43SIFrame\x12\x10\n\x08sequence\x18\x01 \x01(\x03\x12\x14\n\x0ctimestamp_ns\x18\x02 \x01(\x03\x12\x17\n\x0fnum_subcarriers\x18\x03 \x01(\x05\x12\x12\n\namplitudes\x18\x04 \x03(\x01\x12\x14\n\x0cground_truth\x18\x06 \x01(\x08\x12\x1c\n\x14ingestion_latency_ns\x18\x07 \x01(\x03J\x04\x08\x05\x10\x06\"\xfb\x01\n\x11PreprocessedFrame\x12\x10\n\x08sequence\x18\x01 \x01(\x03\x12\x14\n\x0ctimestamp_ns\x18\x02 \x01(\x03\x12\x16\n\x0emean_amplitude\x18\x03 \x01(\x01\x12\x1a\n\x12variance_amplitude\x18\x04 \x01(\x01\x12\x1b\n\x13max_amplitude_delta\x18\x05 \x01(\x01\x12\x17\n\x0fnum_subcarriers\x18\x06 \x01(\x03\x12\x14\n\x0cground_truth\x18\x07 \x01(\x08\x12\x1c\n\x14ingestion_latency_ns\x18\x08 \x01(\x03\x12 \n\x18preprocessing_latency_ns\x18\t \x01(\x03\"\xc4\x01\n\x0f\x44\x65tectionResult\x12\x10\n\x08sequence\x18\x01 \x01(\x03\x12\x14\n\x0ctimestamp_ns\x18\x02 \x01(\x03\x12\x17\n\x0fobject_detected\x18\x03 \x01(\x08\x12\x12\n\nconfidence\x18\x04 \x01(\x01\x12\x1c\n\x14ingestion_latency_ns\x18\x05 \x01(\x03\x12 \n\x18preprocessing_latency_ns\x18\x06 \x01(\x03\x12\x1c\n\x14inference_latency_ns\x18\x07 \x01(\x03\x32=\n\x10IngestionService\x12)\n\x0c\x46orwardFrame\x12\x0e.isac.CSIFrame\x1a\t.isac.Ack2O\n\x14PreprocessingService\x12\x37\n\x0cProcessFrame\x12\x0e.isac.CSIFrame\x1a\x17.isac.PreprocessedFrame2L\n\x10InferenceService\x12\x38\n\x06\x44\x65tect\x12\x17.isac.PreprocessedFrame\x1a\x15.isac.DetectionResult2{\n\rOutputService\x12\x31\n\x0bStoreResult\x12\x15.isac.DetectionResult\x1a\x0b.isac.Empty\x12\x37\n\x0fGetResultStream\x12\x0b.isac.Empty\x1a\x15.isac.DetectionResult0\x01\x32?\n\x10\x43lockSyncService\x12+\n\x05Probe\x12\x10.isac.ClockProbe\x1a\x10.isac.ClockProbeb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -35,20 +35,22 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_EMPTY']._serialized_end=27
   _globals['_ACK']._serialized_start=29
   _globals['_ACK']._serialized_end=46
-  _globals['_CSIFRAME']._serialized_start=49
-  _globals['_CSIFRAME']._serialized_end=182
-  _globals['_PREPROCESSEDFRAME']._serialized_start=185
-  _globals['_PREPROCESSEDFRAME']._serialized_end=350
-  _globals['_DETECTIONRESULT']._serialized_start=353
-  _globals['_DETECTIONRESULT']._serialized_end=549
-  _globals['_SIMULATORSERVICE']._serialized_start=551
-  _globals['_SIMULATORSERVICE']._serialized_end=616
-  _globals['_INGESTIONSERVICE']._serialized_start=618
-  _globals['_INGESTIONSERVICE']._serialized_end=679
-  _globals['_PREPROCESSINGSERVICE']._serialized_start=681
-  _globals['_PREPROCESSINGSERVICE']._serialized_end=760
-  _globals['_INFERENCESERVICE']._serialized_start=762
-  _globals['_INFERENCESERVICE']._serialized_end=838
-  _globals['_OUTPUTSERVICE']._serialized_start=840
-  _globals['_OUTPUTSERVICE']._serialized_end=963
+  _globals['_CLOCKPROBE']._serialized_start=48
+  _globals['_CLOCKPROBE']._serialized_end=132
+  _globals['_CSIFRAME']._serialized_start=135
+  _globals['_CSIFRAME']._serialized_end=288
+  _globals['_PREPROCESSEDFRAME']._serialized_start=291
+  _globals['_PREPROCESSEDFRAME']._serialized_end=542
+  _globals['_DETECTIONRESULT']._serialized_start=545
+  _globals['_DETECTIONRESULT']._serialized_end=741
+  _globals['_INGESTIONSERVICE']._serialized_start=743
+  _globals['_INGESTIONSERVICE']._serialized_end=804
+  _globals['_PREPROCESSINGSERVICE']._serialized_start=806
+  _globals['_PREPROCESSINGSERVICE']._serialized_end=885
+  _globals['_INFERENCESERVICE']._serialized_start=887
+  _globals['_INFERENCESERVICE']._serialized_end=963
+  _globals['_OUTPUTSERVICE']._serialized_start=965
+  _globals['_OUTPUTSERVICE']._serialized_end=1088
+  _globals['_CLOCKSYNCSERVICE']._serialized_start=1090
+  _globals['_CLOCKSYNCSERVICE']._serialized_end=1153
 # @@protoc_insertion_point(module_scope)

@@ -19,7 +19,7 @@ spec:
       containers:
         - name: output
           image: isac-output:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           env:
             - name: LISTEN_PORT
               value: "50054"
@@ -30,6 +30,16 @@ spec:
               name: grpc
             - containerPort: 8004
               name: metrics
+          readinessProbe:
+            tcpSocket:
+              port: 50054
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: 50054
+            initialDelaySeconds: 5
+            periodSeconds: 10
           resources:
             requests:
               cpu: "100m"

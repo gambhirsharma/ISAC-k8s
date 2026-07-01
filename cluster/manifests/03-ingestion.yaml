@@ -22,7 +22,7 @@ spec:
       containers:
         - name: ingestion
           image: isac-ingestion:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           env:
             - name: PREPROCESSING_SERVICE
               value: "preprocessing:50052"
@@ -36,6 +36,16 @@ spec:
               name: grpc
             - containerPort: 8001
               name: metrics
+          readinessProbe:
+            tcpSocket:
+              port: 50051
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: 50051
+            initialDelaySeconds: 5
+            periodSeconds: 10
           resources:
             requests:
               cpu: "200m"

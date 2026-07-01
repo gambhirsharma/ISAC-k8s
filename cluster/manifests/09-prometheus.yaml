@@ -2,12 +2,12 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: prometheus-config
-  namespace: isac-sensing
+  namespace: isac-monitoring
 data:
   prometheus.yml: |
     global:
-      scrape_interval: 5s
-      evaluation_interval: 5s
+      scrape_interval: 2s
+      evaluation_interval: 2s
 
     scrape_configs:
       - job_name: isac-pipeline
@@ -36,7 +36,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: prometheus
-  namespace: isac-sensing
+  namespace: isac-monitoring
 spec:
   replicas: 1
   selector:
@@ -81,7 +81,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: prometheus
-  namespace: isac-sensing
+  namespace: isac-monitoring
 spec:
   selector:
     app: prometheus

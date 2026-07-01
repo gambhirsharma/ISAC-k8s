@@ -1,10 +1,6 @@
 syntax = "proto3";
 package isac;
 
-service SimulatorService {
-  rpc StreamFrames(Empty) returns (stream CSIFrame);
-}
-
 service IngestionService {
   rpc ForwardFrame(CSIFrame) returns (Ack);
 }
@@ -22,16 +18,32 @@ service OutputService {
   rpc GetResultStream(Empty) returns (stream DetectionResult);
 }
 
+// Runs alongside OutputService on the central node. Simulator (phone) probes this
+// directly, bypassing the pipeline, to estimate phone<->server clock offset — the
+// e2e latency metric subtracts request.timestamp_ns (phone clock) from time.time_ns()
+// (server clock), so the offset must be measured out-of-band and published, not derived
+// from the pipeline's own traffic.
+service ClockSyncService {
+  rpc Probe(ClockProbe) returns (ClockProbe);
+}
+
 message Empty {}
 message Ack { bool ok = 1; }
+
+message ClockProbe {
+  int64 client_send_ns = 1;
+  int64 server_recv_ns = 2;
+  int64 server_send_ns = 3;
+}
 
 message CSIFrame {
   int64 sequence = 1;
   int64 timestamp_ns = 2;
   int32 num_subcarriers = 3;
   repeated double amplitudes = 4;
-  repeated double phases = 5;
+  reserved 5; // was `phases` — generated but never read downstream, dropped to cut wire size
   bool ground_truth = 6;
+  int64 ingestion_latency_ns = 7; // set by ingestion, carried forward so preprocessing can copy it into PreprocessedFrame
 }
 
 message PreprocessedFrame {
@@ -41,6 +53,9 @@ message PreprocessedFrame {
   double variance_amplitude = 4;
   double max_amplitude_delta = 5;
   int64 num_subcarriers = 6;
+  bool ground_truth = 7;
+  int64 ingestion_latency_ns = 8;
+  int64 preprocessing_latency_ns = 9;
 }
 
 message DetectionResult {

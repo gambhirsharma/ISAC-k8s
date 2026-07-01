@@ -16,20 +16,10 @@ spec:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8003"
     spec:
-      affinity:
-        podAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            - labelSelector:
-                matchExpressions:
-                  - key: app
-                    operator: In
-                    values:
-                      - ingestion
-              topologyKey: kubernetes.io/hostname
       containers:
         - name: inference
           image: isac-inference:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           env:
             - name: OUTPUT_SERVICE
               value: "output:50054"
@@ -42,6 +32,16 @@ spec:
               name: grpc
             - containerPort: 8003
               name: metrics
+          readinessProbe:
+            tcpSocket:
+              port: 50053
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: 50053
+            initialDelaySeconds: 5
+            periodSeconds: 10
           resources:
             requests:
               cpu: "200m"

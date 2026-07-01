@@ -29,7 +29,7 @@ spec:
       containers:
         - name: preprocessing
           image: isac-preprocessing:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           env:
             - name: INFERENCE_SERVICE
               value: "inference:50053"
@@ -42,6 +42,16 @@ spec:
               name: grpc
             - containerPort: 8002
               name: metrics
+          readinessProbe:
+            tcpSocket:
+              port: 50052
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: 50052
+            initialDelaySeconds: 5
+            periodSeconds: 10
           resources:
             requests:
               cpu: "200m"
