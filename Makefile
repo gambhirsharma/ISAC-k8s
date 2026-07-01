@@ -1,6 +1,6 @@
-.PHONY: all codegen cilium label-edge namespace build-images deploy validate smoke-test clean \
+.PHONY: all codegen cilium label-edge onboard-edge offboard-edge namespace build-images deploy validate smoke-test clean \
 	logs-simulator logs-ingestion logs-preprocessing logs-inference logs-output logs-prometheus logs-grafana \
-	port-forward-prometheus port-forward-grafana
+	port-forward-prometheus port-forward-grafana port-forward-dashboard dashboard-url
 
 # --- cluster config (override on the command line, e.g. `make deploy REGISTRY=192.168.1.50:5000`) ---
 # REGISTRY defaults to localhost:5000 which ONLY resolves on the box running the
@@ -34,9 +34,21 @@ cilium: codegen
 	@echo "--- Verifying Cilium status ---"
 	kubectl --context $(CONTEXT) -n kube-system exec ds/cilium -- cilium status --brief
 
-# 3. Label the phone's k3s node (join it first with `k3s agent ... --node-name $(EDGE_NODE_NAME)`)
+# 3. Label an edge node so the edge DaemonSets schedule onto it (join it as a k3s
+# agent first — see README). `onboard-edge` is the fuller flow: label + wait for the
+# node's whole hot-path to come up and start reporting. `label-edge` is just the label.
 label-edge:
 	kubectl --context $(CONTEXT) label node $(EDGE_NODE_NAME) isac-edge=true --overwrite
+
+# Onboard a new edge node into the fleet: label it + wait for simulator/ingestion/
+# preprocessing/inference to be Ready on it. Override EDGE_NODE_NAME=<node>.
+onboard-edge:
+	CONTEXT=$(CONTEXT) EDGE_NODE_NAME=$(EDGE_NODE_NAME) ./scripts/onboard-edge.sh $(EDGE_NODE_NAME)
+
+# Remove a node from the fleet: unlabel it, edge DaemonSet pods drain off it.
+offboard-edge:
+	kubectl --context $(CONTEXT) label node $(EDGE_NODE_NAME) isac-edge- || true
+	@echo "Node $(EDGE_NODE_NAME) unlabeled; edge pods will be removed from it."
 
 # 4. Create namespace
 namespace:
@@ -64,10 +76,10 @@ deploy:
 	kubectl --context $(CONTEXT) apply -f cluster/manifests/08-monitoring-rbac.yaml
 	kubectl --context $(CONTEXT) apply -f cluster/manifests/09-prometheus.yaml
 	kubectl --context $(CONTEXT) apply -f cluster/manifests/10-grafana.yaml
-	kubectl --context $(CONTEXT) set image deployment/simulator simulator=$(REGISTRY)/isac-simulator:latest -n isac-sensing
+	kubectl --context $(CONTEXT) set image daemonset/simulator simulator=$(REGISTRY)/isac-simulator:latest -n isac-sensing
 	kubectl --context $(CONTEXT) set image daemonset/ingestion ingestion=$(REGISTRY)/isac-ingestion:latest -n isac-sensing
-	kubectl --context $(CONTEXT) set image deployment/preprocessing preprocessing=$(REGISTRY)/isac-preprocessing:latest -n isac-sensing
-	kubectl --context $(CONTEXT) set image deployment/inference inference=$(REGISTRY)/isac-inference:latest -n isac-sensing
+	kubectl --context $(CONTEXT) set image daemonset/preprocessing preprocessing=$(REGISTRY)/isac-preprocessing:latest -n isac-sensing
+	kubectl --context $(CONTEXT) set image daemonset/inference inference=$(REGISTRY)/isac-inference:latest -n isac-sensing
 	kubectl --context $(CONTEXT) set image deployment/output output=$(REGISTRY)/isac-output:latest -n isac-sensing
 	@echo "--- Waiting for all pods to be ready (phone node may be slow) ---"
 	kubectl --context $(CONTEXT) wait --for=condition=ready pod -l app=simulator -n isac-sensing --timeout=180s || true
@@ -81,7 +93,8 @@ deploy:
 	kubectl --context $(CONTEXT) get pods -n isac-sensing -o wide
 	kubectl --context $(CONTEXT) get pods -n isac-monitoring -o wide
 
-# 7. Check placement: simulator/ingestion/preprocessing on the phone, inference/output elsewhere
+# 7. Check placement: simulator/ingestion/preprocessing/inference on every edge node
+# (DaemonSets), output/monitoring on the central node.
 validate:
 	@echo "=== Pod placement ==="
 	kubectl --context $(CONTEXT) get pods -n isac-sensing -o wide
@@ -129,6 +142,15 @@ port-forward-prometheus:
 
 port-forward-grafana:
 	kubectl --context $(CONTEXT) port-forward -n isac-monitoring svc/grafana 3000:3000
+
+# Custom fleet dashboard (edge-node count + searchable detection log)
+port-forward-dashboard:
+	@echo "Dashboard -> http://localhost:8080/"
+	kubectl --context $(CONTEXT) port-forward -n isac-sensing svc/dashboard 8080:8080
+
+# Print the NodePort URL for the dashboard (reachable from any LAN client, no port-forward)
+dashboard-url:
+	@echo "http://<any-node-ip>:$$(kubectl --context $(CONTEXT) -n isac-sensing get svc dashboard -o jsonpath='{.spec.ports[0].nodePort}')/"
 
 # Tear down the pipeline (not the cluster itself — k3s runs on real hosts,
 # uninstall via k3s-uninstall.sh / k3s-agent-uninstall.sh on those hosts if needed)

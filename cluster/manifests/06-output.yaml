@@ -16,6 +16,16 @@ spec:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8004"
     spec:
+      # Keep the central collector OFF edge nodes — it aggregates the whole fleet and
+      # shouldn't compete for the edge devices' scarce CPU/RAM.
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: isac-edge
+                    operator: NotIn
+                    values: ["true"]
       containers:
         - name: output
           image: isac-output:latest
@@ -25,11 +35,15 @@ spec:
               value: "50054"
             - name: METRICS_PORT
               value: "8004"
+            - name: DASHBOARD_PORT
+              value: "8080"
           ports:
             - containerPort: 50054
               name: grpc
             - containerPort: 8004
               name: metrics
+            - containerPort: 8080
+              name: dashboard
           readinessProbe:
             tcpSocket:
               port: 50054
@@ -60,3 +74,21 @@ spec:
     - port: 50054
       targetPort: 50054
       name: grpc
+---
+# Separate Service for the human-facing web dashboard (edge-node count + log view).
+# NodePort so it's reachable from a laptop on the LAN without a port-forward; the
+# node count + searchable detection log live here, gRPC fan-in stays on the port above.
+apiVersion: v1
+kind: Service
+metadata:
+  name: dashboard
+  namespace: isac-sensing
+spec:
+  type: NodePort
+  selector:
+    app: output
+  ports:
+    - port: 8080
+      targetPort: 8080
+      nodePort: 30080
+      name: dashboard

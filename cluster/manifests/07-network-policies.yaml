@@ -37,6 +37,15 @@ spec:
         - ports:
             - port: "50054"
               protocol: TCP
+    # Web dashboard (output:8080) reached via NodePort from a LAN client (world) or
+    # in-cluster port-forward. Only `output` listens on 8080, so this is scoped in effect.
+    - fromEntities:
+        - world
+        - cluster
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
     - fromEndpoints:
         - matchLabels:
             app: prometheus

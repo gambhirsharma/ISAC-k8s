@@ -1,10 +1,9 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: DaemonSet
 metadata:
   name: preprocessing
   namespace: isac-sensing
 spec:
-  replicas: 1
   selector:
     matchLabels:
       app: preprocessing
@@ -16,16 +15,11 @@ spec:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8002"
     spec:
-      affinity:
-        podAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            - labelSelector:
-                matchExpressions:
-                  - key: app
-                    operator: In
-                    values:
-                      - ingestion
-              topologyKey: kubernetes.io/hostname
+      # DaemonSet + nodeSelector puts one preprocessing pod on every edge node,
+      # colocated with that node's ingestion/inference. Replaces the old single-pod
+      # podAffinity-to-ingestion trick, which only ever placed ONE preprocessing pod.
+      nodeSelector:
+        isac-edge: "true"
       containers:
         - name: preprocessing
           image: isac-preprocessing:latest
@@ -68,6 +62,8 @@ metadata:
 spec:
   selector:
     app: preprocessing
+  # Node-local: ingestion on edge-A only reaches preprocessing on edge-A.
+  internalTrafficPolicy: Local
   ports:
     - port: 50052
       targetPort: 50052
