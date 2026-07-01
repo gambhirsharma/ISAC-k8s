@@ -10,8 +10,14 @@ There is no separate local dev cluster (KIND) anymore — everything runs on the
 
 | Node | Role | Runs |
 |---|---|---|
-| k3s server (LAN host: spare PC / mini PC / Pi / VM) | control-plane + central worker | `inference`, `output`, `prometheus`, `grafana` |
+| k3s server (LAN host: spare PC / mini PC / Pi / VM) | control-plane + central worker | `inference`, `output` |
 | phone (Termux, `k3s agent`, node name `android-edge-01`, label `isac-edge=true`) | edge worker | `simulator`, `ingestion`, `preprocessing` |
+
+`prometheus`/`grafana` aren't pinned to either node (no `nodeSelector`) — they land wherever the scheduler puts them, typically the server.
+
+Two namespaces, one cluster:
+- `isac-sensing` — the 5 pipeline services. This is deliberately the *only* namespace they're in, split across nodes via `nodeSelector`/`affinity`, not namespace. Namespace has nothing to do with node placement — splitting edge vs. central pods into separate namespaces would only add cross-namespace FQDN service names (`inference.isac-sensing.svc.cluster.local` instead of `inference:50053`) for no benefit.
+- `isac-monitoring` — `prometheus` + `grafana`. Split out purely for RBAC/blast-radius separation from the pipeline namespace. Prometheus's scrape config still targets `isac-sensing` pods across the namespace boundary (`kubernetes_sd_configs.namespaces.names: [isac-sensing]`), and its RBAC `Role`/`RoleBinding` live in `isac-sensing` (granting `get/list/watch` on pods there) while its `ServiceAccount` lives in `isac-monitoring` — a cross-namespace `RoleBinding` subject, not a `ClusterRole`.
 
 Single `kubectl` context (default name `k3s-isac`, override with `CONTEXT=`). All Make targets operate on it.
 
@@ -34,6 +40,9 @@ The `preprocessing → inference` gRPC call now crosses a real WiFi hop to/from 
 
 All three are env-overridable, no other behavior change.
 
+### `01-namespace.yaml`, `08-monitoring-rbac.yaml`, `09-prometheus.yaml`, `10-grafana.yaml` — monitoring split into `isac-monitoring`
+Added a second `Namespace` (`isac-monitoring`) and moved `prometheus`/`grafana`'s Deployments/Services/ConfigMaps into it. `08-monitoring-rbac.yaml`'s `ServiceAccount` moved to `isac-monitoring`; the `Role`/`RoleBinding` stay in `isac-sensing` with the `RoleBinding` subject pointing cross-namespace at `isac-monitoring`'s service account. `09-prometheus.yaml`'s scrape config is unchanged — it already scoped `kubernetes_sd_configs` to `namespaces.names: [isac-sensing]` explicitly, so it keeps discovering the pipeline pods regardless of which namespace Prometheus itself runs in. `07-network-policies.yaml`'s Prometheus ingress rule got a `k8s:io.kubernetes.pod.namespace: isac-monitoring` label added to its `fromEndpoints` selector (Cilium's default same-namespace match no longer applies once the source moved out); the dead `grafana → :9090` rule (leftover from when both were in `isac-sensing`) was removed.
+
 ### `Makefile` — rewritten for k3s only
 Removed: `kind-up`, `load-images`, and the `kind delete cluster`/`docker rmi` steps in `clean`. Removed `cluster/kind-config.yaml` (no longer needed).
 
@@ -45,7 +54,7 @@ Every target now takes `--context $(CONTEXT)`:
 - `deploy` — apply all manifests, then `kubectl set image` each workload to `$(REGISTRY)/isac-*:latest` (manifests themselves stay registry-agnostic), then wait for pods.
 - `validate` — pod placement + node labels/arch.
 - `smoke-test` — throwaway busybox pod scheduled with `nodeSelector: {isac-edge: "true"}`, to confirm the phone accepts and runs pods before trusting it with real services.
-- `clean` — delete the `isac-sensing` namespace (does **not** tear down the k3s cluster itself — that's real infrastructure now, not disposable local KIND; use `k3s-uninstall.sh` / `k3s-agent-uninstall.sh` on the respective hosts if you actually want to tear the cluster down).
+- `clean` — delete both the `isac-sensing` and `isac-monitoring` namespaces (does **not** tear down the k3s cluster itself — that's real infrastructure now, not disposable local KIND; use `k3s-uninstall.sh` / `k3s-agent-uninstall.sh` on the respective hosts if you actually want to tear the cluster down).
 - `all` chains `cilium label-edge namespace build-images deploy` — it does **not** create the cluster or join the phone, since those happen on remote hosts this Makefile doesn't control (see Setup below).
 
 Override any of `CONTEXT`, `EDGE_NODE_NAME`, `REGISTRY` on the command line, e.g.:
@@ -56,10 +65,9 @@ make deploy CONTEXT=k3s-isac EDGE_NODE_NAME=android-edge-01 REGISTRY=192.168.1.5
 ### Not changed (verified correct as-is)
 - `03-ingestion.yaml` — already `hostNetwork: true` DaemonSet with `nodeSelector: {isac-edge: "true"}`.
 - `04-preprocessing.yaml` — podAffinity to ingestion kept, it's the mechanism that forces phone colocation.
-- `01-namespace.yaml`, `08-monitoring-rbac.yaml`, `09-prometheus.yaml`, `10-grafana.yaml` — no k3s-specific changes needed.
 - `cluster/cilium-values.yaml` — reused as-is.
 - `output.py` — latency calc (`time.time_ns() - request.timestamp_ns`) unchanged in code, but see **Clock sync** below — it's now clock-skew sensitive since the timestamp originates on the phone.
-- `07-network-policies.yaml` — `CiliumNetworkPolicy`; only applies if you install Cilium (skip it if you take the flannel fallback).
+- `07-network-policies.yaml` (beyond the Prometheus selector fix above) — `CiliumNetworkPolicy`; only applies if you install Cilium (skip it if you take the flannel fallback).
 
 ## Setup — steps outside this repo (manual, not scriptable)
 
@@ -112,10 +120,15 @@ Android normally auto-syncs NTP over WiFi; verify rather than assume.
 
 - `kubectl --context k3s-isac get nodes -o wide` — phone `Ready`, `arch=arm64`.
 - `kubectl --context k3s-isac get pods -n isac-sensing -o wide` — simulator/ingestion/preprocessing on the phone node, inference/output elsewhere.
+- `kubectl --context k3s-isac get pods -n isac-monitoring -o wide` — prometheus/grafana running, independent of the `isac-sensing` pods.
 - Grafana Panel 6 (e2e latency p50/p95/p99) and Panel 7 (throughput/stage) show continuous non-zero data — same dashboard as before, no new instrumentation needed. This is the number that answers "was moving to the phone worth it."
 - `preprocessing_frames_dropped` stays near zero during a clean run; a rising count under load is the phone-hop reliability signal.
 - Manual `date` check both sides before trusting e2e latency.
 - Multi-hour soak with node/pod status watched for flapping — the real pass/fail gate on phone feasibility, separate from the latency measurement itself.
+
+## Current status
+
+Validated end-to-end on the real k3s cluster as a single-node baseline (`gam-hetzner`, temporarily labeled `isac-edge=true` itself) before the phone joins — all 5 pipeline services plus `prometheus`/`grafana` running, images pushed to a local `registry:2` container (`localhost:5000`) on the server since server and image-build host were the same box. `output_results_stored_total` matched `preprocessing_frames_processed_total` with `preprocessing_frames_dropped_total` at 0, average e2e latency ≈4ms — the pre-phone baseline the plan's Phase 6 step 7 asks to compare the post-phone number against. `localhost:5000` only works because the node and registry currently share a host; once the phone joins, `REGISTRY` must point at the server's real LAN/public IP instead, and the phone's containerd needs that registry marked insecure (no TLS) if it's not fronted with a cert.
 
 ## Risks
 

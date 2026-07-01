@@ -38,6 +38,7 @@ spec:
     - fromEndpoints:
         - matchLabels:
             app: prometheus
+            k8s:io.kubernetes.pod.namespace: isac-monitoring
       toPorts:
         - ports:
             - port: "8000"
@@ -49,13 +50,6 @@ spec:
             - port: "8003"
               protocol: TCP
             - port: "8004"
-              protocol: TCP
-    - fromEndpoints:
-        - matchLabels:
-            app: grafana
-      toPorts:
-        - ports:
-            - port: "9090"
               protocol: TCP
   egress:
     - toEntities:

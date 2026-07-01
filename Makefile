@@ -69,11 +69,12 @@ deploy:
 	kubectl --context $(CONTEXT) wait --for=condition=ready pod -l app=preprocessing -n isac-sensing --timeout=180s || true
 	kubectl --context $(CONTEXT) wait --for=condition=ready pod -l app=inference -n isac-sensing --timeout=120s || true
 	kubectl --context $(CONTEXT) wait --for=condition=ready pod -l app=output -n isac-sensing --timeout=120s || true
-	kubectl --context $(CONTEXT) wait --for=condition=ready pod -l app=prometheus -n isac-sensing --timeout=120s || true
-	kubectl --context $(CONTEXT) wait --for=condition=ready pod -l app=grafana -n isac-sensing --timeout=120s || true
+	kubectl --context $(CONTEXT) wait --for=condition=ready pod -l app=prometheus -n isac-monitoring --timeout=120s || true
+	kubectl --context $(CONTEXT) wait --for=condition=ready pod -l app=grafana -n isac-monitoring --timeout=120s || true
 	@echo "Waiting for ingestion DaemonSet..."
 	@sleep 5
 	kubectl --context $(CONTEXT) get pods -n isac-sensing -o wide
+	kubectl --context $(CONTEXT) get pods -n isac-monitoring -o wide
 
 # 7. Check placement: simulator/ingestion/preprocessing on the phone, inference/output elsewhere
 validate:
@@ -82,6 +83,9 @@ validate:
 	@echo ""
 	@echo "=== Services ==="
 	kubectl --context $(CONTEXT) get svc -n isac-sensing
+	@echo ""
+	@echo "=== Monitoring (isac-monitoring ns) ==="
+	kubectl --context $(CONTEXT) get pods,svc -n isac-monitoring
 	@echo ""
 	@echo "=== Nodes, arch, edge label ==="
 	kubectl --context $(CONTEXT) get nodes -o wide --show-labels | grep -E 'isac-edge|ARCH'
@@ -109,20 +113,21 @@ logs-output:
 	kubectl --context $(CONTEXT) logs -n isac-sensing -l app=output --tail=50
 
 logs-prometheus:
-	kubectl --context $(CONTEXT) logs -n isac-sensing -l app=prometheus --tail=50
+	kubectl --context $(CONTEXT) logs -n isac-monitoring -l app=prometheus --tail=50
 
 logs-grafana:
-	kubectl --context $(CONTEXT) logs -n isac-sensing -l app=grafana --tail=50
+	kubectl --context $(CONTEXT) logs -n isac-monitoring -l app=grafana --tail=50
 
 # 9. Monitoring UI access
 port-forward-prometheus:
-	kubectl --context $(CONTEXT) port-forward -n isac-sensing svc/prometheus 9090:9090
+	kubectl --context $(CONTEXT) port-forward -n isac-monitoring svc/prometheus 9090:9090
 
 port-forward-grafana:
-	kubectl --context $(CONTEXT) port-forward -n isac-sensing svc/grafana 3000:3000
+	kubectl --context $(CONTEXT) port-forward -n isac-monitoring svc/grafana 3000:3000
 
 # Tear down the pipeline (not the cluster itself — k3s runs on real hosts,
 # uninstall via k3s-uninstall.sh / k3s-agent-uninstall.sh on those hosts if needed)
 clean:
 	kubectl --context $(CONTEXT) delete namespace isac-sensing --ignore-not-found
+	kubectl --context $(CONTEXT) delete namespace isac-monitoring --ignore-not-found
 	rm -f services/proto/isac_pb2.py services/proto/isac_pb2_grpc.py
