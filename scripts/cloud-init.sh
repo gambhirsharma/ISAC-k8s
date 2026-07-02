@@ -82,6 +82,22 @@ keadm init \
   --set cloudCore.modules.dynamicController.enable=true
 kubectl --context "$CONTEXT" -n kubeedge rollout status deploy/cloudcore --timeout=180s
 
+# --- fix kubectl logs/exec against edge pods ---
+# edged always reports the node's DaemonEndpoints.KubeletEndpoint port as 10350, no matter what
+# edged.tailoredKubeletConfig.readOnlyPort is set to (kubeedge/kubeedge#4952). Meanwhile cloudcore's
+# iptables-manager self-assigns a *different*, incrementing tunnel port on every restart
+# (10350 -> 10351 -> 10352..., kubeedge/kubeedge#4810) and DNATs *that* port to its stream server —
+# so apiserver's direct dial to <node-ip>:10350 gets "connection refused" the moment cloudcore has
+# restarted even once. cloudcore runs hostNetwork on this node, so its stream server is always
+# reachable at 127.0.0.1:10003 here regardless of that drift; add a static redirect for the port
+# edged actually reports, independent of whatever port iptables-manager thinks it owns.
+echo ">> Fixing kubectl logs/exec tunnel (works around kubeedge/kubeedge#4952 + #4810)"
+node="${CLUSTER_NAME}-control-plane"
+docker exec "$node" sh -c '
+  iptables-legacy -t nat -C OUTPUT -p tcp --dport 10350 -j DNAT --to-destination 127.0.0.1:10003 2>/dev/null ||
+  iptables-legacy -t nat -I OUTPUT 1 -p tcp --dport 10350 -j DNAT --to-destination 127.0.0.1:10003
+'
+
 # --- keep kube-proxy + kindnet (kind's CNI) OFF edge nodes; they only run on kind's Docker nodes ---
 echo ">> Patching kube-proxy + kindnet off edge nodes"
 for ds in kube-proxy kindnet; do
