@@ -41,6 +41,11 @@ spec:
             # <cloud-lan-ip>:<nodeport> to use the NodePort fallback instead.
             - name: CLOCK_SYNC_TARGET
               value: "output:50054"
+            # Reported to output on each clock probe so it can skew-correct this node's e2e.
+            - name: EDGE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
             - name: METRICS_PORT
               value: "8000"
           ports:

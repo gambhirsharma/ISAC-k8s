@@ -41,6 +41,12 @@ stream_latency = Histogram("output_end_to_end_latency_raw_ms",
 stage_latency = Histogram("output_stage_latency_ms",
                           "Per-edge-node, per-stage local processing latency (from the fan-in stream)",
                           ["edge_node", "stage"], buckets=LATENCY_BUCKETS_MS)
+# raw e2e minus the edge's reported clock offset — the trustworthy cross-machine latency.
+stream_latency_corrected = Histogram("output_end_to_end_latency_corrected_ms",
+                            "End-to-end latency, corrected for edge/server clock skew (raw - edge_offset)",
+                            ["edge_node"], buckets=LATENCY_BUCKETS_MS)
+# Per-node clock offset (server - edge, ms) reported by each edge via the clock-sync probe.
+clock_offset = Gauge("output_edge_clock_offset_ms", "Reported edge->server clock offset", ["edge_node"])
 edge_nodes_connected = Gauge("output_edge_nodes_connected", "Edge nodes seen within NODE_TIMEOUT_S")
 running = True
 
@@ -57,8 +63,17 @@ class Collector:
         self.log = deque(maxlen=LOG_BUFFER_SIZE)   # newest appended at the right
         self.results = deque(maxlen=1000)          # kept for GetResultStream consumers
         self.nodes = {}                            # edge_node -> aggregate dict
+        self.offsets = {}                          # edge_node -> clock offset (ns), from probes
 
-    def record(self, request, end_to_end_ms):
+    def set_offset(self, node, offset_ns):
+        with self.lock:
+            self.offsets[node] = offset_ns
+
+    def get_offset(self, node):
+        with self.lock:
+            return self.offsets.get(node, 0)
+
+    def record(self, request, end_to_end_ms, corrected_ms):
         now_ns = time.time_ns()
         node = request.edge_node or "unknown"
         entry = {
@@ -68,6 +83,7 @@ class Collector:
             "object_detected": bool(request.object_detected),
             "confidence": round(request.confidence, 4),
             "e2e_latency_ms": round(end_to_end_ms, 3),
+            "e2e_corrected_ms": round(corrected_ms, 3),
             "ingestion_latency_ms": round(request.ingestion_latency_ns / 1e6, 3),
             "preprocessing_latency_ms": round(request.preprocessing_latency_ns / 1e6, 3),
             "inference_latency_ms": round(request.inference_latency_ns / 1e6, 3),
@@ -78,12 +94,13 @@ class Collector:
             n = self.nodes.get(node)
             if n is None:
                 n = {"frames": 0, "detections": 0, "last_seen_ns": now_ns,
-                     "first_seen_ns": now_ns, "e2e_sum_ms": 0.0}
+                     "first_seen_ns": now_ns, "e2e_sum_ms": 0.0, "e2e_corr_sum_ms": 0.0}
                 self.nodes[node] = n
             n["frames"] += 1
             if entry["object_detected"]:
                 n["detections"] += 1
             n["e2e_sum_ms"] += end_to_end_ms
+            n["e2e_corr_sum_ms"] += corrected_ms
             n["last_seen_ns"] = now_ns
 
     def snapshot_nodes(self):
@@ -105,6 +122,8 @@ class Collector:
                     "detections": n["detections"],
                     "detection_rate": round(n["detections"] / frames, 4) if frames else 0.0,
                     "avg_e2e_ms": round(n["e2e_sum_ms"] / frames, 3) if frames else 0.0,
+                    "avg_e2e_corrected_ms": round(n["e2e_corr_sum_ms"] / frames, 3) if frames else 0.0,
+                    "clock_offset_ms": round(self.offsets.get(name, 0) / 1e6, 3),
                     "uptime_s": round((now_ns - n["first_seen_ns"]) / 1e9, 1),
                 })
         return connected, out
@@ -137,11 +156,15 @@ COLLECTOR = Collector()
 class OutputServicer(isac_pb2_grpc.OutputServiceServicer):
     def StoreResult(self, request, context):
         now_ns = time.time_ns()
-        end_to_end_ms = (now_ns - request.timestamp_ns) / 1e6
         node = request.edge_node or "unknown"
-        COLLECTOR.record(request, end_to_end_ms)
+        end_to_end_ms = (now_ns - request.timestamp_ns) / 1e6
+        # Skew-correct: subtract this node's (server - edge) offset so the number reflects
+        # real cross-machine transit, not the two hosts' clock difference. Clamp at 0.
+        corrected_ms = max(0.0, (now_ns - request.timestamp_ns - COLLECTOR.get_offset(node)) / 1e6)
+        COLLECTOR.record(request, end_to_end_ms, corrected_ms)
         results_stored.labels(edge_node=node).inc()
         stream_latency.labels(edge_node=node).observe(end_to_end_ms)
+        stream_latency_corrected.labels(edge_node=node).observe(corrected_ms)
         # Per-stage latencies ride the result (populated on the edge). Observing them here is
         # the whole edge-latency observability story under KubeEdge — no cloud->edge scrape.
         stage_latency.labels(edge_node=node, stage="ingestion").observe(request.ingestion_latency_ns / 1e6)
@@ -161,6 +184,10 @@ class OutputServicer(isac_pb2_grpc.OutputServiceServicer):
 class ClockSyncServicer(isac_pb2_grpc.ClockSyncServiceServicer):
     def Probe(self, request, context):
         recv_ns = time.time_ns()
+        # Store the edge's reported offset so StoreResult can skew-correct this node's e2e.
+        if request.edge_node:
+            COLLECTOR.set_offset(request.edge_node, request.edge_offset_ns)
+            clock_offset.labels(edge_node=request.edge_node).set(request.edge_offset_ns / 1e6)
         return isac_pb2.ClockProbe(
             client_send_ns=request.client_send_ns,
             server_recv_ns=recv_ns,
@@ -228,7 +255,7 @@ DASHBOARD_HTML = """<!doctype html>
   </div>
   <div class="log-wrap"><table>
     <thead><tr><th>recv</th><th>edge node</th><th>seq</th><th>detected</th>
-      <th>conf</th><th>e2e ms</th><th>ingest</th><th>preproc</th><th>infer</th></tr></thead>
+      <th>conf</th><th>e2e ms (corr)</th><th>e2e ms (raw)</th><th>ingest</th><th>preproc</th><th>infer</th></tr></thead>
     <tbody id="logs"></tbody>
   </table></div>
 </main>
@@ -248,7 +275,9 @@ async function refresh() {
       <div class="kv"><span>status</span><b>${n.online?'online':(n.last_seen_s_ago+'s ago')}</b></div>
       <div class="kv"><span>frames</span><b>${n.frames.toLocaleString()}</b></div>
       <div class="kv"><span>detections</span><b>${n.detections.toLocaleString()} (${(n.detection_rate*100).toFixed(1)}%)</b></div>
-      <div class="kv"><span>avg e2e</span><b>${n.avg_e2e_ms} ms</b></div>
+      <div class="kv"><span>avg e2e (corrected)</span><b>${n.avg_e2e_corrected_ms} ms</b></div>
+      <div class="kv"><span>avg e2e (raw)</span><b>${n.avg_e2e_ms} ms</b></div>
+      <div class="kv"><span>clock offset</span><b>${n.clock_offset_ms} ms</b></div>
       <div class="kv"><span>uptime</span><b>${n.uptime_s}s</b></div>
     </div>`).join('') || '<div class="muted">no edge nodes have reported yet</div>';
   const opts = new Set(nodes.nodes.map(n=>n.node));
@@ -257,7 +286,7 @@ async function refresh() {
   document.getElementById('logs').innerHTML = logs.map(e => `
     <tr><td>${fmtTime(e.recv_ns)}</td><td>${e.node}</td><td>${e.sequence}</td>
       <td class="${e.object_detected?'yes':'no'}">${e.object_detected?'YES':'no'}</td>
-      <td>${e.confidence}</td><td>${e.e2e_latency_ms}</td>
+      <td>${e.confidence}</td><td>${e.e2e_corrected_ms}</td><td>${e.e2e_latency_ms}</td>
       <td>${e.ingestion_latency_ms}</td><td>${e.preprocessing_latency_ms}</td>
       <td>${e.inference_latency_ms}</td></tr>`).join('');
 }
