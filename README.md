@@ -13,6 +13,8 @@ reporting.
 The `simulator` generates synthetic CSI as a stand-in for a future **6G ISAC sensor** — the only
 component swapped for real hardware later; everything downstream is source-agnostic.
 
+![ISAC-k8s architecture](public/ISAC-k8s.png)
+
 ## 📖 Documentation
 
 Full docs (architecture, per-topic deep-dives, deployment): **<https://gambhirsharma.github.io/ISAC-k8s/>**

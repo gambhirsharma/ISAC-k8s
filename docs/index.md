@@ -20,7 +20,7 @@ dashboard.
 
 ---
 
-![ISAC-k8s architecture](assets/architecture.svg)
+![ISAC-k8s architecture](assets/architecture.png)
 
 ## What this project is
 

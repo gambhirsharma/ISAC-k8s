@@ -13,7 +13,7 @@ finished detections cross the network to the cloud. Everything else — the runt
 networking, the observability — is arranged to protect that seam. This page is the overview; the
 child pages drill into each piece.
 
-![ISAC-k8s architecture](assets/architecture.svg)
+![ISAC-k8s architecture](assets/architecture.png)
 
 ## The cluster shape
 
