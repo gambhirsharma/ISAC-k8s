@@ -76,19 +76,21 @@ spec:
       name: grpc
 ---
 # Separate Service for the human-facing web dashboard (edge-node count + log view).
-# NodePort so it's reachable from a laptop on the LAN without a port-forward; the
-# node count + searchable detection log live here, gRPC fan-in stays on the port above.
+# ClusterIP (not NodePort): the dashboard is unauthenticated, so it must NOT be
+# exposed on a node port reachable from outside the cluster. Reach it with
+# `make port-forward-dashboard` (kubectl port-forward -> http://localhost:8080/).
+# If you need LAN access without a port-forward, front it with an authenticated
+# ingress/reverse-proxy rather than switching back to NodePort.
 apiVersion: v1
 kind: Service
 metadata:
   name: dashboard
   namespace: isac-sensing
 spec:
-  type: NodePort
+  type: ClusterIP
   selector:
     app: output
   ports:
     - port: 8080
       targetPort: 8080
-      nodePort: 30080
       name: dashboard
