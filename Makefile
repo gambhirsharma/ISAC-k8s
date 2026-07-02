@@ -4,14 +4,16 @@
 	port-forward-prometheus port-forward-grafana port-forward-dashboard dashboard-url
 
 # --- cluster config (override on the command line, e.g. `make deploy REGISTRY=192.168.1.50:5000`) ---
-# CONTEXT      kubectl context of the kubeadm CLOUD cluster (cloudcore runs here).
+# CONTEXT      kubectl context of the CLOUD cluster running cloudcore (kind: kind-isac).
 # EDGE_NODE_NAME  the edgecore node name (see scripts/join-edge.sh).
-# REGISTRY     image registry reachable from BOTH the cloud host and every edge device.
-#              localhost:5000 only works single-host; override to a LAN/public IP for real edges.
-# CLOUDCORE_IP the address edge nodes dial for the CloudHub websocket (cloud host LAN/public IP).
-CONTEXT ?= kubeadm-isac
+# REGISTRY     image namespace/registry. Default is a public Docker Hub namespace: images are
+#              public, so edge devices pull them over TLS with NO insecure-registry config.
+#              For a private/LAN registry instead, override (e.g. REGISTRY=100.64.5.120:5000)
+#              and run scripts/setup-edge-registry.sh on each edge device.
+# CLOUDCORE_IP the address edge nodes dial for CloudHub (e.g. the Tailscale IP 100.64.5.120).
+CONTEXT ?= kind-isac
 EDGE_NODE_NAME ?= laptop-edge
-REGISTRY ?= localhost:5000
+REGISTRY ?= gambhir
 CLOUDCORE_IP ?=
 
 # The kubeadm cloud cluster, cloudcore, and each edgecore join are one-time host-level

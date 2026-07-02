@@ -89,21 +89,27 @@ make edgemesh   CONTEXT=kubeadm-isac EDGEMESH_PSK=$(openssl rand -base64 32)
 
 ### 2. Join an edge device (once per device)
 
-Get a token on the cloud host, then join from the edge device:
+Get a token on the cloud host, then join from the edge device (one command does everything —
+installs containerd if missing, keadm, a minimal CNI, then joins):
 ```
-make keadm-token                                          # on the cloud host
-sudo ./scripts/join-edge.sh <cloudcore-ip> <node> <token> <registry>   # on the edge device
+make keadm-token                                        # on the cloud host
+sudo ./scripts/join-edge.sh <cloudcore-ip> <node> <token>   # on the edge device
 ```
-`join-edge.sh` configures containerd's insecure registry, then `keadm join` with `edgeStream`
-(pairs with cloudStream) and `metaServer` (required by EdgeMesh) enabled. Confirm with
-`kubectl --context kubeadm-isac get nodes -o wide` (node `Ready`, correct arch). **Soak it** before
+With the default **public Docker Hub** images, omit the registry arg — the edge pulls over TLS with
+no extra config. For a private/LAN registry, pass it as a 4th arg (or run
+`scripts/setup-edge-registry.sh <registry>`), which writes containerd's insecure-registry config.
+edgecore needs a CNI to report `Ready` even though the hot-path pods are hostNetwork —
+`join-edge.sh` installs one via `scripts/setup-edge-cni.sh`. Confirm with
+`kubectl --context kind-isac get nodes -o wide` (node `Ready`, correct arch). **Soak it** before
 onboarding — a flapping node should be caught here, not while debugging the pipeline.
 
 ### 3. Images, namespace, pipeline
+Default `REGISTRY` is the public Docker Hub namespace `gambhir` (images public → edge pulls with no
+insecure-registry config). Override for your own namespace or a private/LAN registry.
 ```
-make build-images REGISTRY=<registry-reachable-from-every-node>
-make namespace CONTEXT=kubeadm-isac
-make deploy CONTEXT=kubeadm-isac REGISTRY=<same registry>   # edge DaemonSets stay 0 pods until a node is labeled
+make build-images REGISTRY=gambhir            # docker buildx --push to docker.io/gambhir/isac-*
+make namespace CONTEXT=kind-isac
+make deploy CONTEXT=kind-isac REGISTRY=gambhir # edge DaemonSets stay 0 pods until a node is labeled
 ```
 
 ### 4. Onboard edge nodes (per node)
