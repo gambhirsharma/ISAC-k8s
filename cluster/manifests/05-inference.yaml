@@ -1,10 +1,9 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: DaemonSet
 metadata:
   name: inference
   namespace: isac-sensing
 spec:
-  replicas: 1
   selector:
     matchLabels:
       app: inference
@@ -16,6 +15,12 @@ spec:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8003"
     spec:
+      # Inference now runs ON each edge node (was central) — the whole detection
+      # hot-path is node-local, so only the DetectionResult crosses the network to
+      # the central `output` collector. Scales linearly per edge node, no central
+      # inference bottleneck.
+      nodeSelector:
+        isac-edge: "true"
       containers:
         - name: inference
           image: isac-inference:latest
@@ -27,6 +32,11 @@ spec:
               value: "50053"
             - name: METRICS_PORT
               value: "8003"
+            # Origin edge node, stamped onto every DetectionResult for the fleet dashboard.
+            - name: EDGE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
           ports:
             - containerPort: 50053
               name: grpc
@@ -58,6 +68,8 @@ metadata:
 spec:
   selector:
     app: inference
+  # Node-local: preprocessing on edge-A only reaches inference on edge-A.
+  internalTrafficPolicy: Local
   ports:
     - port: 50053
       targetPort: 50053

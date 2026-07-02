@@ -1,19 +1,19 @@
-# ISAC-k8s — Phone-as-k3s-edge-node
+# ISAC-k8s — multi-edge sensing fleet
 
-Pipeline: 5 gRPC microservices (`simulator → ingestion → preprocessing → inference → output`) with Prometheus/Grafana, running on a **single real k3s cluster** where an Android phone is a real worker node. `simulator + ingestion + preprocessing` run on the phone; `inference + output` run on the other (central) k3s node(s). This is an experimental spike measuring real WiFi-hop latency cost, not a production milestone.
+Pipeline: 5 gRPC microservices (`simulator → ingestion → preprocessing → inference → output`) with Prometheus/Grafana, on **one real k3s cluster** with a **fleet of edge nodes** (phones / Pis / VMs). Each edge node runs the whole detection hot-path (`simulator → ingestion → preprocessing → inference`) locally; only the resulting `DetectionResult` fans in over the network to a single central `output` collector, which tracks how many edge nodes are connected and serves a web dashboard with a searchable detection log. Add an edge node → label it → its pipeline auto-schedules and starts reporting.
 
-Full design rationale: [`mobile-integration-plan.md`](mobile-integration-plan.md). This README is the "what's implemented + how to run it" companion.
+Design + the KubeEdge-vs-k3s-agent decision: [`edge-fleet-plan.md`](edge-fleet-plan.md). Original single-phone rationale: [`mobile-integration-plan.md`](mobile-integration-plan.md). This README is the "what's implemented + how to run it" companion.
 
-There is no separate local dev cluster (KIND) anymore — everything runs on the one k3s cluster described below, since a Docker-in-Docker cluster like KIND can't have a physical phone join it as a node. If you need a fast local iteration loop, add a second k3s node (any VM/PC) as a stand-in "central" node and just don't join the phone yet — same manifests, same Makefile.
+There is no separate local dev cluster (KIND) — everything runs on the one k3s cluster, since KIND can't have a physical phone join it as a node. For a fast local loop, add a second k3s node (any VM/PC) as the "central" node and label a throwaway node `isac-edge=true` as a stand-in edge — same manifests, same Makefile.
 
 ## Cluster shape
 
 | Node | Role | Runs |
 |---|---|---|
-| k3s server (LAN host: spare PC / mini PC / Pi / VM) | control-plane + central worker | `inference`, `output` |
-| phone (Termux, `k3s agent`, node name `android-edge-01`, label `isac-edge=true`) | edge worker | `simulator`, `ingestion`, `preprocessing` |
+| k3s server (LAN host: spare PC / mini PC / Pi / VM) | control-plane + central worker | `output` (collector+dashboard), `prometheus`, `grafana` |
+| edge node ×N (phone/Pi/VM, `k3s agent`, label `isac-edge=true`) | edge worker | `simulator`, `ingestion`, `preprocessing`, `inference` (one set per edge node, via DaemonSets) |
 
-`prometheus`/`grafana` aren't pinned to either node (no `nodeSelector`) — they land wherever the scheduler puts them, typically the server.
+The edge workloads are **DaemonSets** gated on `isac-edge=true`, so every labeled node gets exactly one set and adding a node is just labeling it. `simulator/ingestion/preprocessing/inference` communicate **node-locally** — their Services use `internalTrafficPolicy: Local`, so a node's traffic never leaves the node until the final `DetectionResult → output` hop. `output` is pinned OFF edge nodes (nodeAffinity `isac-edge NotIn true`). `prometheus`/`grafana` land wherever the scheduler puts them (typically the server).
 
 Two namespaces, one cluster:
 - `isac-sensing` — the 5 pipeline services. This is deliberately the *only* namespace they're in, split across nodes via `nodeSelector`/`affinity`, not namespace. Namespace has nothing to do with node placement — splitting edge vs. central pods into separate namespaces would only add cross-namespace FQDN service names (`inference.isac-sensing.svc.cluster.local` instead of `inference:50053`) for no benefit.
@@ -99,30 +99,49 @@ make cilium CONTEXT=k3s-isac
 ```
 Flannel fallback: skip `make cilium`, skip `07-network-policies.yaml` (`deploy` already `|| true`s that apply), accept no network policy enforcement.
 
-### 2. Join the phone
-On the phone, via Termux (no root required):
-1. Confirm phone and k3s server are on the same WiFi LAN, and the router does **not** have client/AP isolation enabled.
-2. Install k3s agent under Termux/proot, pointed at the server:
+### 2. Join an edge node
+Per device (phone via Termux needs no root). This is the one-time cluster join; the
+ISAC-specific onboarding (labeling + waiting for the pipeline) is step 4 below.
+1. Confirm the device and k3s server are on the same LAN, and the router does **not** have client/AP isolation enabled.
+2. Install the k3s agent, pointed at the server (leave the `isac-edge` label OFF for now — `onboard-edge` adds it once the node is confirmed healthy):
    ```
    k3s agent --server https://<server-lan-ip>:6443 \
      --token <contents of /var/lib/rancher/k3s/server/node-token on the server> \
-     --node-name android-edge-01 --node-label isac-edge=true
+     --node-name edge-02
    ```
-3. `kubectl --context k3s-isac get nodes -o wide` — confirm `Ready`, `kubernetes.io/arch=arm64`.
-4. **Soak for several hours unattended** before proceeding — Doze/battery optimization/OEM background killing can flap the node. Catch instability here, not while debugging the pipeline later.
+3. `kubectl --context k3s-isac get nodes -o wide` — confirm `Ready` and the arch.
+4. **Soak for several hours unattended** before onboarding — a flapping node (phone Doze/battery/OEM killing) should be caught here, not while debugging the pipeline.
 
 **Go/no-go checkpoint**: if k3s agent won't run stably under Termux/proot on non-rooted Android, the fallback is a Raspberry Pi as the edge device, not more debugging — see Risks below.
 
 ### 3. Images, namespace, pipeline
 ```
 make build-images REGISTRY=<registry-reachable-from-every-node>
-make label-edge CONTEXT=k3s-isac EDGE_NODE_NAME=android-edge-01
 make namespace CONTEXT=k3s-isac
-make smoke-test CONTEXT=k3s-isac   # confirm the phone runs pods before trusting it further
-make deploy CONTEXT=k3s-isac REGISTRY=<same registry>
-make validate CONTEXT=k3s-isac
+make deploy CONTEXT=k3s-isac REGISTRY=<same registry>   # applies all DaemonSets/Services; edge pods stay 0 until a node is labeled
 ```
-Deploy in the staged order from `mobile-integration-plan.md` Phase 6 if you want to verify each stage independently (namespace+monitoring first, then `ingestion` alone, then `simulator`+`preprocessing`, then `inference`+`output`) rather than all at once via `make deploy`.
+The edge DaemonSets have 0 pods until at least one node carries `isac-edge=true` — that's what `onboard-edge` does next.
+
+### 4. Onboard edge nodes (the per-node flow)
+For each joined, soaked node:
+```
+make smoke-test CONTEXT=k3s-isac                          # optional: confirm the node runs a throwaway pod
+make onboard-edge CONTEXT=k3s-isac EDGE_NODE_NAME=edge-02 # labels isac-edge=true + waits for the node's pipeline to be Ready
+```
+`onboard-edge` (script: `scripts/onboard-edge.sh`) labels the node, then `kubectl rollout status` each edge DaemonSet so it returns only once that node's `simulator/ingestion/preprocessing/inference` are all up. The node then shows as **online** on the dashboard within seconds. Repeat for every edge device — that's the whole scale-out story.
+
+Remove a node from the fleet: `make offboard-edge EDGE_NODE_NAME=edge-02` (unlabels; edge pods drain off it).
+
+### 5. Fleet dashboard
+The custom web UI (edge-node count + per-node cards + searchable detection log) is served by `output` on `:8080`, exposed as NodePort `30080`:
+```
+make dashboard-url CONTEXT=k3s-isac          # prints http://<node-ip>:30080/
+# or, without NodePort:
+make port-forward-dashboard CONTEXT=k3s-isac # -> http://localhost:8080/
+```
+APIs behind it: `GET /api/nodes` (connected count + per-node stats), `GET /api/logs?node=&q=&limit=` (filterable detection log). Prometheus also gets `output_edge_nodes_connected` for a Grafana panel.
+
+Deploy in the staged order from `mobile-integration-plan.md` Phase 6 if you want to verify each stage independently rather than all at once via `make deploy`.
 
 ## Clock sync
 

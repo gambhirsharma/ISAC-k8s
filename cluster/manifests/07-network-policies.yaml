@@ -37,6 +37,14 @@ spec:
         - ports:
             - port: "50054"
               protocol: TCP
+    # Web dashboard (output:8080). Unauthenticated, so NOT exposed to `world` —
+    # only reachable in-cluster / via `kubectl port-forward` (source: cluster).
+    - fromEntities:
+        - cluster
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
     - fromEndpoints:
         - matchLabels:
             app: prometheus

@@ -62,6 +62,11 @@ metadata:
 spec:
   selector:
     app: ingestion
+  # Keep each edge node's traffic on-node: a client resolving `ingestion` only ever
+  # hits the ingestion pod on its OWN node, never another edge node's. Without this a
+  # ClusterIP would load-balance simulator(edge-A) frames to ingestion(edge-B),
+  # smearing the pipeline across nodes and reintroducing the network hop we removed.
+  internalTrafficPolicy: Local
   ports:
     - port: 50051
       targetPort: 50051

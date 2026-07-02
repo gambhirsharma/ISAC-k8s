@@ -66,4 +66,9 @@ message DetectionResult {
   int64 ingestion_latency_ns = 5;
   int64 preprocessing_latency_ns = 6;
   int64 inference_latency_ns = 7;
+  // Origin edge node (k8s node name). Set by inference from the downward-API
+  // spec.nodeName — since the whole hot path (simulator..inference) is colocated
+  // on one edge node, inference's own node IS the frame's origin. The central
+  // collector/dashboard groups results by this to show which edge nodes are live.
+  string edge_node = 8;
 }

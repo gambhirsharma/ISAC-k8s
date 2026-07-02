@@ -6,5 +6,5 @@ COPY proto/isac_pb2.py proto/isac_pb2_grpc.py /app/proto/
 COPY output/output.py .
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
-EXPOSE 50054
+EXPOSE 50054 8080
 CMD ["python3", "output.py"]

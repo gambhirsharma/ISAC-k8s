@@ -12,6 +12,10 @@ from proto import isac_pb2_grpc
 OUTPUT_TARGET = os.environ.get("OUTPUT_SERVICE", "localhost:50054")
 LISTEN_PORT = int(os.environ.get("LISTEN_PORT", "50053"))
 METRICS_PORT = int(os.environ.get("METRICS_PORT", "8003"))
+# Injected via downward API (spec.nodeName). Since simulator..inference are colocated
+# on one edge node, this node name is the frame's origin edge node — stamped onto the
+# result so the central collector can group/count live edge nodes.
+EDGE_NODE_NAME = os.environ.get("EDGE_NODE_NAME", "unknown")
 
 LATENCY_BUCKETS_MS = (0.5, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 250, 500, 1000, 2000)
 
@@ -49,6 +53,7 @@ class InferenceServicer(isac_pb2_grpc.InferenceServiceServicer):
             ingestion_latency_ns=request.ingestion_latency_ns,
             preprocessing_latency_ns=request.preprocessing_latency_ns,
             inference_latency_ns=elapsed_ns,
+            edge_node=EDGE_NODE_NAME,
         )
         inferences.labels(result="detected" if detected else "not_detected").inc()
         inference_latency.observe(elapsed_ns / 1e6)
