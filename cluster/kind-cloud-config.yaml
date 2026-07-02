@@ -1,0 +1,20 @@
+# kind config for the ISAC CLOUD control plane (the real k8s that cloudcore runs on).
+# Single untainted node so output/prometheus/grafana schedule on it. cloudcore's ports are
+# published ONLY on the Tailscale IP (100.64.5.120) so nothing is exposed to the public IP.
+# Edge devices (edgecore) dial these over Tailscale.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: isac
+nodes:
+  # Single-node cluster: kind removes the control-plane taint automatically, so app pods
+  # (output/prometheus/grafana) schedule here without an explicit untaint patch.
+  - role: control-plane
+    extraPortMappings:
+      # CloudHub websocket — edgecore's primary connection to cloudcore.
+      - { containerPort: 10000, hostPort: 10000, listenAddress: "100.64.5.120", protocol: TCP }
+      # CloudHub HTTPS — token/cert bootstrap during `keadm join`.
+      - { containerPort: 10002, hostPort: 10002, listenAddress: "100.64.5.120", protocol: TCP }
+      # CloudStream — kubectl logs/exec tunnel (pairs with edgeStream on the edge).
+      - { containerPort: 10003, hostPort: 10003, listenAddress: "100.64.5.120", protocol: TCP }
+      # output fan-in NodePort fallback (used if EdgeMesh resolution of `output` is unavailable).
+      - { containerPort: 30054, hostPort: 30054, listenAddress: "100.64.5.120", protocol: TCP }
