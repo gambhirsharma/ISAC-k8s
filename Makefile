@@ -1,4 +1,4 @@
-.PHONY: all codegen cloud-init edgemesh keadm-token join-edge label-edge onboard-edge offboard-edge \
+.PHONY: all codegen cloud-init edge-container edgemesh keadm-token join-edge label-edge onboard-edge offboard-edge \
 	namespace build-images deploy validate smoke-test clean \
 	logs-simulator logs-ingestion logs-preprocessing logs-inference logs-output logs-prometheus logs-grafana \
 	port-forward-prometheus port-forward-grafana port-forward-dashboard dashboard-url
@@ -25,20 +25,25 @@ all: namespace build-images deploy
 codegen:
 	cd services && ./codegen.sh
 
-# 2. Stand up the KubeEdge control plane on the cloud host: kubeadm single-node (untainted)
-# + a CNI + cloudcore with cloudStream (kubectl logs/exec to edge) and dynamicController
-# (EdgeMesh) enabled, then patch kube-proxy off edge nodes. Root, cloud host only.
+# 2. Stand up the KubeEdge cloud control plane as an isolated kind cluster running cloudcore
+# (cloudStream + dynamicController), and patch kube-proxy + kindnet off edge nodes. Sudo-free,
+# no host changes. Set CLOUDCORE_IP to the address edges dial (e.g. your Tailscale IP).
 cloud-init:
-	CONTEXT=$(CONTEXT) CLOUDCORE_IP=$(CLOUDCORE_IP) ./scripts/cloud-init.sh
+	ADVERTISE_IP=$(CLOUDCORE_IP) ./scripts/cloud-init.sh
+
+# Bring up a CO-LOCATED test edge on THIS host (privileged kindest/node container) + onboard
+# it. For validating the pipeline on one box. Real remote device -> use join-edge.sh instead.
+edge-container:
+	ADVERTISE_IP=$(CLOUDCORE_IP) ./scripts/edge-container.sh $(EDGE_NODE_NAME)
 
 # 3. Install EdgeMesh (per-node agent) so the edge hot-path can resolve the cross-node
 # `output` service. The node-local hops use localhost and do NOT depend on this.
 edgemesh:
 	CONTEXT=$(CONTEXT) ./scripts/edgemesh-install.sh
 
-# Print a join token for edge nodes (runs `keadm gettoken` on the cloud host).
+# Print a join token for edge nodes (kind cloud kubeconfig).
 keadm-token:
-	keadm gettoken --kube-config /etc/kubernetes/admin.conf
+	keadm gettoken --kube-config $$HOME/.kube/config
 
 # 4. Join an edge device (run ON the edge device, not here — this just prints the command).
 join-edge:
