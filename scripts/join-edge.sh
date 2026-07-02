@@ -24,7 +24,19 @@ if [[ -z "$CLOUDCORE_IP" || -z "$NODE" || -z "$TOKEN" ]]; then
   exit 2
 fi
 [[ $EUID -eq 0 ]] || { echo "ERROR: run as root (sudo)." >&2; exit 1; }
-systemctl is-active --quiet containerd || { echo "ERROR: containerd not running. Install + start it first." >&2; exit 1; }
+
+# --- containerd (edgecore's CRI runtime): install if missing, best-effort per distro ---
+if ! command -v containerd >/dev/null; then
+  echo ">> Installing containerd"
+  if   command -v pacman >/dev/null; then pacman -Sy --noconfirm containerd
+  elif command -v apt-get >/dev/null; then apt-get update && apt-get install -y containerd
+  elif command -v dnf    >/dev/null; then dnf install -y containerd
+  elif command -v zypper >/dev/null; then zypper install -y containerd
+  else echo "ERROR: no known package manager; install containerd manually." >&2; exit 1
+  fi
+fi
+systemctl enable --now containerd
+systemctl is-active --quiet containerd || { echo "ERROR: containerd failed to start." >&2; exit 1; }
 
 # --- keadm ---
 if ! command -v keadm >/dev/null; then
@@ -63,6 +75,11 @@ server = "http://$REGISTRY"
 EOF
   systemctl restart containerd
 fi
+
+# CNI must exist before edgecore starts, or edged reports the node NotReady.
+echo ">> Setting up edge CNI (so the node reports Ready)"
+DIR="$(cd "$(dirname "$0")" && pwd)"
+ARCH="$ARCH" "$DIR/setup-edge-cni.sh"
 
 echo ">> keadm join -> cloudcore $CLOUDCORE_IP:$CLOUDHUB_PORT as node '$NODE'"
 # edgeStream pairs with cloudStream for `kubectl logs`/`exec` from the cloud.
