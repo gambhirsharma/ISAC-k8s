@@ -20,6 +20,9 @@ METRICS_PORT = int(os.environ.get("METRICS_PORT", "8000"))
 CLOCK_SYNC_TARGET = os.environ.get("CLOCK_SYNC_TARGET", "output:50054")
 CLOCK_SYNC_INTERVAL_S = float(os.environ.get("CLOCK_SYNC_INTERVAL_S", "10"))
 CLOCK_SYNC_SAMPLES = int(os.environ.get("CLOCK_SYNC_SAMPLES", "5"))
+# This edge node's name (downward API spec.nodeName), reported to output on each clock probe
+# so output can key the offset per node and skew-correct that node's e2e latency.
+EDGE_NODE_NAME = os.environ.get("EDGE_NODE_NAME", "unknown")
 
 LATENCY_BUCKETS_MS = (0.5, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 250, 500, 1000, 2000)
 
@@ -95,6 +98,7 @@ def clock_sync_loop():
     """
     channel = None
     stub = None
+    last_offset_ns = 0   # reported to output on each probe; stable, so a 1-round lag is fine
     while running:
         try:
             if stub is None:
@@ -104,7 +108,10 @@ def clock_sync_loop():
             best_offset_ns = None
             for _ in range(CLOCK_SYNC_SAMPLES):
                 client_send_ns = time.time_ns()
-                probe = isac_pb2.ClockProbe(client_send_ns=client_send_ns)
+                # Carry node name + last-known offset so output can store & apply it per-node.
+                probe = isac_pb2.ClockProbe(client_send_ns=client_send_ns,
+                                            edge_node=EDGE_NODE_NAME,
+                                            edge_offset_ns=int(last_offset_ns))
                 response = stub.Probe(probe, timeout=2.0)
                 client_recv_ns = time.time_ns()
                 rtt_ns = (client_recv_ns - client_send_ns) - (response.server_send_ns - response.server_recv_ns)
@@ -113,6 +120,7 @@ def clock_sync_loop():
                     best_rtt_ns = rtt_ns
                     best_offset_ns = offset_ns
             if best_offset_ns is not None:
+                last_offset_ns = best_offset_ns
                 clock_offset_gauge.set(best_offset_ns / 1e6)
                 clock_sync_rtt_gauge.set(best_rtt_ns / 1e6)
         except grpc.RpcError as e:

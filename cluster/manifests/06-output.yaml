@@ -62,17 +62,23 @@ spec:
               cpu: "200m"
               memory: "128Mi"
 ---
+# output fan-in Service. Under KubeEdge this is the one Service the edge hot-path resolves
+# cross-node. EdgeMesh proxies edge->cloud to the ClusterIP; the NodePort (30054) is the
+# env-overridable fallback (point edge OUTPUT_SERVICE/CLOCK_SYNC_TARGET at
+# <cloud-lan-ip>:30054 if EdgeMesh routing isn't available).
 apiVersion: v1
 kind: Service
 metadata:
   name: output
   namespace: isac-sensing
 spec:
+  type: NodePort
   selector:
     app: output
   ports:
     - port: 50054
       targetPort: 50054
+      nodePort: 30054
       name: grpc
 ---
 # Separate Service for the human-facing web dashboard (edge-node count + log view).

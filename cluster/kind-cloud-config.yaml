@@ -1,0 +1,25 @@
+# kind config for the ISAC CLOUD control plane (the real k8s that cloudcore runs on).
+# Single untainted node so output/prometheus/grafana schedule on it. cloudcore's ports are
+# published ONLY on the Tailscale IP (100.64.5.120) so nothing is exposed to the public IP.
+# Edge devices (edgecore) dial these over Tailscale.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: isac
+nodes:
+  # Single-node cluster: kind removes the control-plane taint automatically, so app pods
+  # (output/prometheus/grafana) schedule here without an explicit untaint patch.
+  - role: control-plane
+    extraPortMappings:
+      # CloudHub websocket — edgecore's primary connection to cloudcore.
+      - { containerPort: 10000, hostPort: 10000, listenAddress: "100.64.5.120", protocol: TCP }
+      # CloudHub HTTPS — token/cert bootstrap during `keadm join`.
+      - { containerPort: 10002, hostPort: 10002, listenAddress: "100.64.5.120", protocol: TCP }
+      # CloudStream — kubectl logs/exec data channel (streamPort; carries the actual log/exec bytes).
+      - { containerPort: 10003, hostPort: 10003, listenAddress: "100.64.5.120", protocol: TCP }
+      # CloudStream tunnelPort — edgeStream on the edge dials THIS one (wss://…:10004/v1/kubeedge/connect)
+      # to open its reverse tunnel session. Without it published, edgeStream retries forever with
+      # "connection refused" and cloudcore never has a session for the node, so kubectl logs/exec
+      # against edge pods fails even though 10003 is reachable.
+      - { containerPort: 10004, hostPort: 10004, listenAddress: "100.64.5.120", protocol: TCP }
+      # output fan-in NodePort fallback (used if EdgeMesh resolution of `output` is unavailable).
+      - { containerPort: 30054, hostPort: 30054, listenAddress: "100.64.5.120", protocol: TCP }

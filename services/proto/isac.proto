@@ -34,6 +34,11 @@ message ClockProbe {
   int64 client_send_ns = 1;
   int64 server_recv_ns = 2;
   int64 server_send_ns = 3;
+  // The edge computes the NTP offset (it has all four timestamps); the cloud can't scrape
+  // that edge gauge under KubeEdge, so the edge reports its latest estimate back here and
+  // output stores it per-node to skew-correct e2e latency. edge_node keys the storage.
+  string edge_node = 4;
+  int64 edge_offset_ns = 5; // latest (server_clock - edge_clock) estimate, ns
 }
 
 message CSIFrame {

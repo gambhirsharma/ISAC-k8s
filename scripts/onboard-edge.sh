@@ -2,10 +2,9 @@
 # Onboard an edge node into the ISAC fleet.
 #
 # Prereq (done once, outside this script — see README "Join an edge node"):
-#   the device has already joined the k3s cluster as an agent, e.g.
-#     k3s agent --server https://<server-ip>:6443 --token <token> \
-#       --node-name <NODE> --node-label kubernetes.io/arch=<arch>
-#   and shows up in `kubectl get nodes` as Ready.
+#   the device has already joined the KubeEdge cluster as an edgecore node, e.g.
+#     sudo ./scripts/join-edge.sh <cloudcore-ip> <NODE> <token> <registry>
+#   (which runs `keadm join ...`) and shows up in `kubectl get nodes` as Ready.
 #
 # This script does the ISAC-specific onboarding: label the node so the edge
 # DaemonSets (simulator, ingestion, preprocessing, inference) schedule onto it,
@@ -15,7 +14,7 @@
 set -euo pipefail
 
 NODE="${1:-${EDGE_NODE_NAME:-}}"
-CONTEXT="${CONTEXT:-k3s-isac}"
+CONTEXT="${CONTEXT:-kubeadm-isac}"
 NS="${NS:-isac-sensing}"
 TIMEOUT="${TIMEOUT:-180s}"
 EDGE_DS="simulator ingestion preprocessing inference"
@@ -30,7 +29,7 @@ kc() { kubectl --context "$CONTEXT" "$@"; }
 echo ">> Onboarding edge node '$NODE' (context=$CONTEXT)"
 
 if ! kc get node "$NODE" >/dev/null 2>&1; then
-  echo "ERROR: node '$NODE' not found. Join it as a k3s agent first (see README)." >&2
+  echo "ERROR: node '$NODE' not found. Join it with ./scripts/join-edge.sh first (see README)." >&2
   exit 1
 fi
 
