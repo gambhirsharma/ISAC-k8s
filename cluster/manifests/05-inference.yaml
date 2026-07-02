@@ -15,17 +15,25 @@ spec:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8003"
     spec:
-      # Inference now runs ON each edge node (was central) — the whole detection
-      # hot-path is node-local, so only the DetectionResult crosses the network to
-      # the central `output` collector. Scales linearly per edge node, no central
-      # inference bottleneck.
+      # Inference runs ON each edge node — the whole detection hot-path is node-local, so
+      # only the DetectionResult crosses the network to the central `output` collector.
       nodeSelector:
         isac-edge: "true"
+      tolerations:
+        - key: node-role.kubernetes.io/edge
+          operator: Exists
+          effect: NoSchedule
+      # hostNetwork so preprocessing reaches it on localhost:50053. ClusterFirstWithHostNet
+      # keeps cluster DNS so EdgeMesh can resolve the cross-node `output` service.
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
       containers:
         - name: inference
           image: isac-inference:latest
           imagePullPolicy: Always
           env:
+            # Cross-node hop (edge->cloud), the ONLY hop that leaves the node. Resolved by
+            # EdgeMesh; override to <cloud-lan-ip>:<nodeport> for the NodePort fallback.
             - name: OUTPUT_SERVICE
               value: "output:50054"
             - name: LISTEN_PORT
@@ -59,18 +67,4 @@ spec:
             limits:
               cpu: "1"
               memory: "512Mi"
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: inference
-  namespace: isac-sensing
-spec:
-  selector:
-    app: inference
-  # Node-local: preprocessing on edge-A only reaches inference on edge-A.
-  internalTrafficPolicy: Local
-  ports:
-    - port: 50053
-      targetPort: 50053
-      name: grpc
+# No Service: only client is this node's preprocessing, over localhost:50053 (hostNetwork).

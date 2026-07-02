@@ -40,136 +40,76 @@ metadata:
 data:
   isac-pipeline.json: |
     {
-      "title": "ISAC Pipeline",
+      "title": "ISAC Fleet (KubeEdge)",
       "uid": "isac-pipeline",
       "timezone": "browser",
       "schemaVersion": 39,
       "refresh": "5s",
-      "time": { "from": "now-5m", "to": "now" },
+      "time": { "from": "now-15m", "to": "now" },
       "panels": [
         {
           "id": 1,
-          "title": "Simulator emit rate (Hz)",
-          "type": "timeseries",
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+          "title": "Edge nodes connected",
+          "type": "stat",
+          "gridPos": { "h": 8, "w": 6, "x": 0, "y": 0 },
           "targets": [
-            { "expr": "rate(simulator_frames_sent_total[1m])", "legendFormat": "frames/s (measured)" },
-            { "expr": "simulator_emit_rate_hz", "legendFormat": "emit_rate_hz (reported)" }
+            { "expr": "output_edge_nodes_connected", "legendFormat": "connected" }
           ]
         },
         {
           "id": 2,
-          "title": "Ingestion forward latency (p50/p95)",
+          "title": "Result throughput per edge node (frames/s)",
           "type": "timeseries",
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+          "gridPos": { "h": 8, "w": 18, "x": 6, "y": 0 },
           "targets": [
-            { "expr": "histogram_quantile(0.50, rate(ingestion_forward_latency_ms_bucket[1m]))", "legendFormat": "p50" },
-            { "expr": "histogram_quantile(0.95, rate(ingestion_forward_latency_ms_bucket[1m]))", "legendFormat": "p95" }
+            { "expr": "sum by (edge_node) (rate(output_results_stored_total[1m]))", "legendFormat": "{{edge_node}}" }
           ]
         },
         {
           "id": 3,
-          "title": "Ingestion in-flight frames",
+          "title": "E2E latency, raw — fleet-wide (p50/p95/p99), NOT clock-skew corrected",
           "type": "timeseries",
           "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
           "targets": [
-            { "expr": "ingestion_in_flight", "legendFormat": "in_flight" }
+            { "expr": "histogram_quantile(0.50, sum by (le) (rate(output_end_to_end_latency_raw_ms_bucket[1m])))", "legendFormat": "p50" },
+            { "expr": "histogram_quantile(0.95, sum by (le) (rate(output_end_to_end_latency_raw_ms_bucket[1m])))", "legendFormat": "p95" },
+            { "expr": "histogram_quantile(0.99, sum by (le) (rate(output_end_to_end_latency_raw_ms_bucket[1m])))", "legendFormat": "p99" }
           ]
         },
         {
           "id": 4,
-          "title": "Preprocessing latency (p50/p95)",
+          "title": "E2E latency p95 per edge node (raw)",
           "type": "timeseries",
           "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
           "targets": [
-            { "expr": "histogram_quantile(0.50, rate(preprocessing_process_latency_ms_bucket[1m]))", "legendFormat": "p50" },
-            { "expr": "histogram_quantile(0.95, rate(preprocessing_process_latency_ms_bucket[1m]))", "legendFormat": "p95" }
+            { "expr": "histogram_quantile(0.95, sum by (edge_node, le) (rate(output_end_to_end_latency_raw_ms_bucket[1m])))", "legendFormat": "{{edge_node}}" }
           ]
         },
         {
           "id": 5,
-          "title": "Inference latency (p50/p95) + detections",
+          "title": "Per-stage local latency p95 (from fan-in) — fleet-wide",
           "type": "timeseries",
           "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
           "targets": [
-            { "expr": "histogram_quantile(0.50, rate(inference_latency_ms_bucket[1m]))", "legendFormat": "latency p50" },
-            { "expr": "histogram_quantile(0.95, rate(inference_latency_ms_bucket[1m]))", "legendFormat": "latency p95" },
-            { "expr": "rate(inference_total[1m])", "legendFormat": "{{result}}" }
+            { "expr": "histogram_quantile(0.95, sum by (stage, le) (rate(output_stage_latency_ms_bucket[1m])))", "legendFormat": "{{stage}} p95" }
           ]
         },
         {
           "id": 6,
-          "title": "E2E latency, raw (p50/p95/p99) — NOT clock-skew corrected",
+          "title": "Inference stage latency p95 per edge node",
           "type": "timeseries",
           "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
           "targets": [
-            { "expr": "histogram_quantile(0.50, rate(output_end_to_end_latency_raw_ms_bucket[1m]))", "legendFormat": "p50 raw" },
-            { "expr": "histogram_quantile(0.95, rate(output_end_to_end_latency_raw_ms_bucket[1m]))", "legendFormat": "p95 raw" },
-            { "expr": "histogram_quantile(0.99, rate(output_end_to_end_latency_raw_ms_bucket[1m]))", "legendFormat": "p99 raw" }
+            { "expr": "histogram_quantile(0.95, sum by (edge_node, le) (rate(output_stage_latency_ms_bucket{stage=\"inference\"}[1m])))", "legendFormat": "{{edge_node}}" }
           ]
         },
         {
           "id": 7,
-          "title": "Throughput per stage (frames/s)",
+          "title": "Total results stored per node (counter)",
           "type": "timeseries",
           "gridPos": { "h": 8, "w": 24, "x": 0, "y": 24 },
           "targets": [
-            { "expr": "rate(simulator_frames_sent_total[1m])", "legendFormat": "simulator sent" },
-            { "expr": "rate(ingestion_frames_forwarded_total[1m])", "legendFormat": "ingestion forwarded" },
-            { "expr": "rate(preprocessing_frames_processed_total[1m])", "legendFormat": "preprocessing processed (local, decoupled from WiFi hop)" },
-            { "expr": "rate(output_results_stored_total[1m])", "legendFormat": "output stored" }
-          ]
-        },
-        {
-          "id": 8,
-          "title": "WiFi hop latency: preprocessing -> inference Detect RPC (p50/p95/p99)",
-          "type": "timeseries",
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 32 },
-          "targets": [
-            { "expr": "histogram_quantile(0.50, rate(preprocessing_inference_rpc_latency_ms_bucket[1m]))", "legendFormat": "p50" },
-            { "expr": "histogram_quantile(0.95, rate(preprocessing_inference_rpc_latency_ms_bucket[1m]))", "legendFormat": "p95" },
-            { "expr": "histogram_quantile(0.99, rate(preprocessing_inference_rpc_latency_ms_bucket[1m]))", "legendFormat": "p99" }
-          ]
-        },
-        {
-          "id": 9,
-          "title": "Phone<->server clock offset & sync RTT",
-          "type": "timeseries",
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 32 },
-          "targets": [
-            { "expr": "simulator_clock_offset_ms", "legendFormat": "offset (server - phone) ms" },
-            { "expr": "simulator_clock_sync_rtt_ms", "legendFormat": "sync probe RTT ms" }
-          ]
-        },
-        {
-          "id": 10,
-          "title": "E2E latency, skew-corrected estimate (raw p50/p95/p99 minus clock offset)",
-          "type": "timeseries",
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 40 },
-          "targets": [
-            { "expr": "histogram_quantile(0.50, rate(output_end_to_end_latency_raw_ms_bucket[1m])) - simulator_clock_offset_ms", "legendFormat": "p50 corrected" },
-            { "expr": "histogram_quantile(0.95, rate(output_end_to_end_latency_raw_ms_bucket[1m])) - simulator_clock_offset_ms", "legendFormat": "p95 corrected" },
-            { "expr": "histogram_quantile(0.99, rate(output_end_to_end_latency_raw_ms_bucket[1m])) - simulator_clock_offset_ms", "legendFormat": "p99 corrected" }
-          ]
-        },
-        {
-          "id": 11,
-          "title": "Detection accuracy vs ground truth (precision / recall)",
-          "type": "timeseries",
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 40 },
-          "targets": [
-            { "expr": "sum(rate(inference_detection_confusion_total{ground_truth=\"true\",detected=\"true\"}[1m])) / sum(rate(inference_detection_confusion_total{detected=\"true\"}[1m]))", "legendFormat": "precision" },
-            { "expr": "sum(rate(inference_detection_confusion_total{ground_truth=\"true\",detected=\"true\"}[1m])) / sum(rate(inference_detection_confusion_total{ground_truth=\"true\"}[1m]))", "legendFormat": "recall" }
-          ]
-        },
-        {
-          "id": 12,
-          "title": "Frames dropped by reason (rate/s) + dispatch queue depth",
-          "type": "timeseries",
-          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 48 },
-          "targets": [
-            { "expr": "sum by (reason) (rate(preprocessing_frames_dropped_total[1m]))", "legendFormat": "dropped: {{reason}}" },
-            { "expr": "preprocessing_dispatch_queue_depth", "legendFormat": "dispatch queue depth" }
+            { "expr": "sum by (edge_node) (output_results_stored_total)", "legendFormat": "{{edge_node}}" }
           ]
         }
       ]

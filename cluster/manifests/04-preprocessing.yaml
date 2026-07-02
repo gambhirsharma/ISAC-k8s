@@ -16,17 +16,25 @@ spec:
         prometheus.io/port: "8002"
     spec:
       # DaemonSet + nodeSelector puts one preprocessing pod on every edge node,
-      # colocated with that node's ingestion/inference. Replaces the old single-pod
-      # podAffinity-to-ingestion trick, which only ever placed ONE preprocessing pod.
+      # colocated with that node's ingestion/inference.
       nodeSelector:
         isac-edge: "true"
+      tolerations:
+        - key: node-role.kubernetes.io/edge
+          operator: Exists
+          effect: NoSchedule
+      # hostNetwork so ingestion reaches it on localhost:50052 and it reaches this node's
+      # inference on localhost:50053 (no kube-proxy on edge).
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
       containers:
         - name: preprocessing
           image: isac-preprocessing:latest
           imagePullPolicy: Always
           env:
+            # Node-local hop over localhost.
             - name: INFERENCE_SERVICE
-              value: "inference:50053"
+              value: "localhost:50053"
             - name: LISTEN_PORT
               value: "50052"
             - name: METRICS_PORT
@@ -53,18 +61,4 @@ spec:
             limits:
               cpu: "500m"
               memory: "256Mi"
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: preprocessing
-  namespace: isac-sensing
-spec:
-  selector:
-    app: preprocessing
-  # Node-local: ingestion on edge-A only reaches preprocessing on edge-A.
-  internalTrafficPolicy: Local
-  ports:
-    - port: 50052
-      targetPort: 50052
-      name: grpc
+# No Service: only client is this node's ingestion, over localhost:50052 (hostNetwork).

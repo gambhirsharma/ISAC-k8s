@@ -10,6 +10,11 @@ data:
       evaluation_interval: 2s
 
     scrape_configs:
+      # KubeEdge: the cloud CANNOT reach edge pod IPs, so we do NOT scrape the edge hot-path
+      # pods (simulator/ingestion/preprocessing/inference) directly — their scrape would just
+      # time out. Instead ALL edge latency observability arrives via the gRPC fan-in and is
+      # re-exported by the cloud-side `output` pod as output_stage_latency_ms /
+      # output_end_to_end_latency_raw_ms (labeled per edge_node). So we scrape app=output only.
       - job_name: isac-pipeline
         kubernetes_sd_configs:
           - role: pod
@@ -20,6 +25,10 @@ data:
           - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
             action: keep
             regex: "true"
+          # Only the cloud-side output pod is scrapable; drop the (unreachable) edge pods.
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            action: keep
+            regex: "output"
           - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
             action: replace
             regex: ([^:]+)(?::\d+)?;(\d+)

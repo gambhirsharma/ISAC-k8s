@@ -30,9 +30,17 @@ LATENCY_BUCKETS_MS = (0.5, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 250, 500, 100
 results_stored = Counter("output_results_stored", "Detection results stored", ["edge_node"])
 # Raw = server_clock - phone_clock(timestamp_ns). NOT corrected for clock skew between
 # the edge node and this node — see ClockSyncService and simulator_clock_offset_ms.
+# Labeled by edge_node: under KubeEdge the cloud can't scrape edge pod IPs, so ALL latency
+# observability flows through this fan-in — this is the per-node e2e latency source.
 stream_latency = Histogram("output_end_to_end_latency_raw_ms",
                             "End-to-end latency from emission to result, uncorrected for edge/server clock skew",
-                            buckets=LATENCY_BUCKETS_MS)
+                            ["edge_node"], buckets=LATENCY_BUCKETS_MS)
+# Per-node, per-stage local processing latency, reconstructed from the *_latency_ns fields
+# each DetectionResult already carries. Replaces scraping the edge pods' own histograms
+# (impossible cloud->edge under KubeEdge). stage in {ingestion,preprocessing,inference}.
+stage_latency = Histogram("output_stage_latency_ms",
+                          "Per-edge-node, per-stage local processing latency (from the fan-in stream)",
+                          ["edge_node", "stage"], buckets=LATENCY_BUCKETS_MS)
 edge_nodes_connected = Gauge("output_edge_nodes_connected", "Edge nodes seen within NODE_TIMEOUT_S")
 running = True
 
@@ -69,11 +77,13 @@ class Collector:
             self.results.append(request)
             n = self.nodes.get(node)
             if n is None:
-                n = {"frames": 0, "detections": 0, "last_seen_ns": now_ns, "first_seen_ns": now_ns}
+                n = {"frames": 0, "detections": 0, "last_seen_ns": now_ns,
+                     "first_seen_ns": now_ns, "e2e_sum_ms": 0.0}
                 self.nodes[node] = n
             n["frames"] += 1
             if entry["object_detected"]:
                 n["detections"] += 1
+            n["e2e_sum_ms"] += end_to_end_ms
             n["last_seen_ns"] = now_ns
 
     def snapshot_nodes(self):
@@ -94,6 +104,7 @@ class Collector:
                     "frames": frames,
                     "detections": n["detections"],
                     "detection_rate": round(n["detections"] / frames, 4) if frames else 0.0,
+                    "avg_e2e_ms": round(n["e2e_sum_ms"] / frames, 3) if frames else 0.0,
                     "uptime_s": round((now_ns - n["first_seen_ns"]) / 1e9, 1),
                 })
         return connected, out
@@ -127,9 +138,15 @@ class OutputServicer(isac_pb2_grpc.OutputServiceServicer):
     def StoreResult(self, request, context):
         now_ns = time.time_ns()
         end_to_end_ms = (now_ns - request.timestamp_ns) / 1e6
+        node = request.edge_node or "unknown"
         COLLECTOR.record(request, end_to_end_ms)
-        results_stored.labels(edge_node=request.edge_node or "unknown").inc()
-        stream_latency.observe(end_to_end_ms)
+        results_stored.labels(edge_node=node).inc()
+        stream_latency.labels(edge_node=node).observe(end_to_end_ms)
+        # Per-stage latencies ride the result (populated on the edge). Observing them here is
+        # the whole edge-latency observability story under KubeEdge — no cloud->edge scrape.
+        stage_latency.labels(edge_node=node, stage="ingestion").observe(request.ingestion_latency_ns / 1e6)
+        stage_latency.labels(edge_node=node, stage="preprocessing").observe(request.preprocessing_latency_ns / 1e6)
+        stage_latency.labels(edge_node=node, stage="inference").observe(request.inference_latency_ns / 1e6)
         return isac_pb2.Empty()
 
     def GetResultStream(self, request, context):
@@ -231,6 +248,7 @@ async function refresh() {
       <div class="kv"><span>status</span><b>${n.online?'online':(n.last_seen_s_ago+'s ago')}</b></div>
       <div class="kv"><span>frames</span><b>${n.frames.toLocaleString()}</b></div>
       <div class="kv"><span>detections</span><b>${n.detections.toLocaleString()} (${(n.detection_rate*100).toFixed(1)}%)</b></div>
+      <div class="kv"><span>avg e2e</span><b>${n.avg_e2e_ms} ms</b></div>
       <div class="kv"><span>uptime</span><b>${n.uptime_s}s</b></div>
     </div>`).join('') || '<div class="muted">no edge nodes have reported yet</div>';
   const opts = new Set(nodes.nodes.map(n=>n.node));
