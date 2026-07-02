@@ -40,7 +40,12 @@ fi
 if [[ -n "$REGISTRY" ]]; then
   echo ">> Configuring containerd insecure registry: $REGISTRY"
   CONF=/etc/containerd/config.toml
-  [[ -f "$CONF" ]] || { containerd config default >"$CONF"; }
+  mkdir -p /etc/containerd
+  if [[ ! -f "$CONF" ]]; then
+    containerd config default >"$CONF"
+    # Match edgecore's --cgroupdriver=systemd (containerd default is cgroupfs).
+    sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' "$CONF"
+  fi
   # containerd reads per-registry config from certs.d when config_path is set.
   if ! grep -q 'certs.d' "$CONF"; then
     cat >>"$CONF" <<EOF
