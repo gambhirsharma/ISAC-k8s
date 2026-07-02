@@ -1,0 +1,45 @@
+# --- ISAC-k8s documentation site (GitHub Pages + just-the-docs) ---
+title: ISAC-k8s
+description: Distributed 6G ISAC sensing fleet on KubeEdge — a kind cloud control plane with a fleet of edge nodes running the whole detection hot-path.
+remote_theme: just-the-docs/just-the-docs
+
+# Served at https://gambhirsharma.github.io/ISAC-k8s/
+url: https://gambhirsharma.github.io
+baseurl: /ISAC-k8s
+
+color_scheme: dark
+search_enabled: true
+heading_anchors: true
+
+# Repo link + "edit this page" footer.
+aux_links:
+  "GitHub repo":
+    - "https://github.com/gambhirsharma/ISAC-k8s"
+aux_links_new_tab: true
+gh_edit_link: true
+gh_edit_link_text: "Edit this page on GitHub"
+gh_edit_repository: "https://github.com/gambhirsharma/ISAC-k8s"
+gh_edit_branch: "main"
+gh_edit_source: docs
+gh_edit_view_mode: "tree"
+
+footer_content: "ISAC-k8s — distributed 6G ISAC sensing on KubeEdge."
+
+# Styled callouts (used as `{: .note }` on a blockquote).
+callouts:
+  note:
+    title: Note
+    color: blue
+  warning:
+    title: Warning
+    color: red
+
+# GitHub Pages enables these automatically; listed for local `bundle exec jekyll serve`.
+plugins:
+  - jekyll-remote-theme
+  - jekyll-seo-tag
+
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - vendor
