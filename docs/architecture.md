@@ -24,6 +24,8 @@ child pages drill into each piece.
 
 Two namespaces: `isac-sensing` (the pipeline) and `isac-monitoring` (Prometheus + Grafana).
 
+![KubeEdge topology](assets/kubeedge-diagram.png)
+
 ## The three load-bearing decisions
 
 ### 1. The whole hot-path is node-local

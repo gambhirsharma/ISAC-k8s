@@ -15,6 +15,11 @@ component swapped for real hardware later; everything downstream is source-agnos
 
 ![ISAC-k8s architecture](public/ISAC-k8s.png)
 
+The KubeEdge topology — edge nodes in the Edge Mesh running the hot-path, fanning in to the CloudCore
+on the kind cluster:
+
+![KubeEdge topology](public/kubeedge-diagram.png)
+
 ## 📖 Documentation
 
 Full docs (architecture, per-topic deep-dives, deployment): **<https://gambhirsharma.github.io/ISAC-k8s/>**

@@ -13,6 +13,8 @@ An **edge node** is the unit of the fleet. Each one runs the entire detection ho
 the cloud. This page covers what an edge node *is* under KubeEdge, how workloads land on it, and how
 it stays useful when the cloud link drops.
 
+![KubeEdge topology](../assets/kubeedge-diagram.png)
+
 ## What runs on an edge node
 
 Instead of a full Kubernetes node agent, an edge node runs **edgecore**:
