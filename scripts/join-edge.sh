@@ -91,19 +91,21 @@ join_macos() {
   docker exec "$CTR" bash -c '
     printf "#!/bin/sh\nexec \"\$@\"\n" > /usr/bin/sudo && chmod +x /usr/bin/sudo
     systemctl disable --now kubelet 2>/dev/null || true'
-  docker cp "$DIR/setup-edge-cni.sh" "$CTR:/tmp/setup-edge-cni.sh"
-  docker exec -e ARCH="$ARCH" -e POD_SUBNET="$POD_SUBNET" "$CTR" bash /tmp/setup-edge-cni.sh
+  # /tmp is a fresh --tmpfs that systemd's own tmp.mount can remount mid-boot, racing with
+  # (and silently discarding) anything docker-cp'd there. /root isn't tmpfs; use it instead.
+  docker cp "$DIR/setup-edge-cni.sh" "$CTR:/root/setup-edge-cni.sh"
+  docker exec -e ARCH="$ARCH" -e POD_SUBNET="$POD_SUBNET" "$CTR" bash /root/setup-edge-cni.sh
 
   if [[ -n "$REGISTRY" ]]; then
-    docker cp "$DIR/setup-edge-registry.sh" "$CTR:/tmp/setup-edge-registry.sh"
-    docker exec "$CTR" bash /tmp/setup-edge-registry.sh "$REGISTRY"
+    docker cp "$DIR/setup-edge-registry.sh" "$CTR:/root/setup-edge-registry.sh"
+    docker exec "$CTR" bash /root/setup-edge-registry.sh "$REGISTRY"
   fi
 
   if ! docker exec "$CTR" bash -c 'command -v keadm >/dev/null'; then
     echo ">> Installing keadm $KUBEEDGE_VERSION ($ARCH) in container"
     docker exec "$CTR" bash -c "
-      curl -sLo /tmp/k.tgz https://github.com/kubeedge/kubeedge/releases/download/${KUBEEDGE_VERSION}/keadm-${KUBEEDGE_VERSION}-linux-${ARCH}.tar.gz
-      tar xzf /tmp/k.tgz -C /tmp && cp \"\$(find /tmp -name keadm -type f | head -1)\" /usr/local/bin/keadm && chmod +x /usr/local/bin/keadm"
+      curl -sLo /root/k.tgz https://github.com/kubeedge/kubeedge/releases/download/${KUBEEDGE_VERSION}/keadm-${KUBEEDGE_VERSION}-linux-${ARCH}.tar.gz
+      tar xzf /root/k.tgz -C /root && cp \"\$(find /root -name keadm -type f | head -1)\" /usr/local/bin/keadm && chmod +x /usr/local/bin/keadm"
   fi
 
   echo ">> keadm join -> cloudcore $CLOUDCORE_IP:$CLOUDHUB_PORT as node '$NODE'"
