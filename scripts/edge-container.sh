@@ -71,11 +71,24 @@ docker exec "$CTR" keadm join \
   --edgenode-name="$NODE_NAME" \
   --kubeedge-version="$KUBEEDGE_VERSION" \
   --remote-runtime-endpoint=unix:///run/containerd/containerd.sock \
-  --cgroupdriver=systemd \
-  --set modules.edgeStream.enable=true \
-  --set modules.metaServer.enable=true
-# keadm starts edgecore via the sudo shim; ensure it's up
-docker exec "$CTR" bash -c 'systemctl enable --now edgecore 2>/dev/null; systemctl is-active edgecore'
+  --cgroupdriver=systemd
+
+# keadm's `--set` is broken for nested module fields as of v1.23.0 (upstream, unfixed:
+# kubeedge/kubeedge#6661, #6721/#6722), so join runs without it; flip the two booleans
+# directly in the generated config instead (block-scoped by indentation).
+EDGECORE_CONF=/etc/kubeedge/config/edgecore.yaml
+AWK_ENABLE_MODULES='
+{
+  line=$0
+  match(line, /^ */); indent=RLENGTH
+  if (on && indent<=pdepth) on=0
+  if (!on && line ~ /^ *(edgeStream|metaServer): *$/) { on=1; pdepth=indent; print; next }
+  if (on && indent==pdepth+2 && line ~ /^ *enable: *false *$/) sub(/false/,"true")
+  print
+}'
+docker exec "$CTR" bash -c "awk '$AWK_ENABLE_MODULES' $EDGECORE_CONF > $EDGECORE_CONF.tmp && mv $EDGECORE_CONF.tmp $EDGECORE_CONF"
+# keadm starts edgecore via the sudo shim; ensure it picks up the patched config
+docker exec "$CTR" bash -c 'systemctl enable --now edgecore 2>/dev/null; systemctl restart edgecore; systemctl is-active edgecore'
 
 echo ">> Waiting for node '$NODE_NAME' to register Ready"
 for i in $(seq 1 30); do

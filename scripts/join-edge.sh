@@ -32,6 +32,21 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 OS="$(uname -s)"
 NODE_IMAGE="${NODE_IMAGE:-kindest/node:v1.32.5@sha256:e3b2327e3a5ab8c76f5ece68936e4cafaa82edf58486b769727ab0b3b97a5b0d}"
 POD_SUBNET="${POD_SUBNET:-10.244.1.0/24}"
+EDGECORE_CONF=/etc/kubeedge/config/edgecore.yaml
+# keadm's `--set` is broken for nested module fields as of v1.23.0 (upstream, unfixed:
+# kubeedge/kubeedge#6661, #6721/#6722 — "create edge config file failed: Modules..: No
+# such field: in Config"). So `keadm join` runs with no --set, then this flips the
+# edgeStream/metaServer "enable: false" defaults to true directly in the generated
+# config (block-scoped by indentation, no yq/python dependency needed).
+AWK_ENABLE_MODULES='
+{
+  line=$0
+  match(line, /^ */); indent=RLENGTH
+  if (on && indent<=pdepth) on=0
+  if (!on && line ~ /^ *(edgeStream|metaServer): *$/) { on=1; pdepth=indent; print; next }
+  if (on && indent==pdepth+2 && line ~ /^ *enable: *false *$/) sub(/false/,"true")
+  print
+}'
 
 if [[ -z "$CLOUDCORE_IP" || -z "$NODE" || -z "$TOKEN" ]]; then
   echo "usage: $0 <cloudcore-ip> <node-name> <token> [registry]" >&2
@@ -115,10 +130,11 @@ join_macos() {
     --edgenode-name="$NODE" \
     --kubeedge-version="$KUBEEDGE_VERSION" \
     --remote-runtime-endpoint="$RUNTIME_ENDPOINT" \
-    --cgroupdriver=systemd \
-    --set modules.edgeStream.enable=true \
-    --set modules.metaServer.enable=true
-  docker exec "$CTR" bash -c 'systemctl enable --now edgecore 2>/dev/null; systemctl is-active edgecore'
+    --cgroupdriver=systemd
+
+  echo ">> Enabling edgeStream + metaServer (keadm --set can't do nested fields, see kubeedge/kubeedge#6661)"
+  docker exec "$CTR" bash -c "awk '$AWK_ENABLE_MODULES' $EDGECORE_CONF > $EDGECORE_CONF.tmp && mv $EDGECORE_CONF.tmp $EDGECORE_CONF"
+  docker exec "$CTR" bash -c 'systemctl enable --now edgecore 2>/dev/null; systemctl restart edgecore; systemctl is-active edgecore'
 
   echo ""
   echo ">> Joined (container '$CTR'). On the CLOUD host, confirm and onboard:"
@@ -199,9 +215,11 @@ keadm join \
   --edgenode-name="$NODE" \
   --kubeedge-version="$KUBEEDGE_VERSION" \
   --remote-runtime-endpoint="$RUNTIME_ENDPOINT" \
-  --cgroupdriver=systemd \
-  --set modules.edgeStream.enable=true \
-  --set modules.metaServer.enable=true
+  --cgroupdriver=systemd
+
+echo ">> Enabling edgeStream + metaServer (keadm --set can't do nested fields, see kubeedge/kubeedge#6661)"
+awk "$AWK_ENABLE_MODULES" "$EDGECORE_CONF" > "$EDGECORE_CONF.tmp" && mv "$EDGECORE_CONF.tmp" "$EDGECORE_CONF"
+systemctl restart edgecore
 
 echo ""
 echo ">> Joined. On the CLOUD host, confirm and onboard:"
