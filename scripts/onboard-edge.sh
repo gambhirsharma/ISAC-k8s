@@ -14,7 +14,7 @@
 set -euo pipefail
 
 NODE="${1:-${EDGE_NODE_NAME:-}}"
-CONTEXT="${CONTEXT:-kubeadm-isac}"
+CONTEXT="${CONTEXT:-kind-isac}"
 NS="${NS:-isac-sensing}"
 TIMEOUT="${TIMEOUT:-180s}"
 EDGE_DS="simulator ingestion preprocessing inference"

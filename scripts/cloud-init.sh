@@ -20,6 +20,7 @@ ADVERTISE_IP="${ADVERTISE_IP:-}"
 KUBEEDGE_VERSION="${KUBEEDGE_VERSION:-v1.23.0}"
 KIND_VERSION="${KIND_VERSION:-v0.32.0}"
 KUBECTL_VERSION="${KUBECTL_VERSION:-v1.32.13}"
+ARCH="${ARCH:-$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')}"
 # KubeEdge 1.23 supports k8s <=1.32; this kind node image is k8s v1.32.5.
 NODE_IMAGE="${NODE_IMAGE:-kindest/node:v1.32.5@sha256:e3b2327e3a5ab8c76f5ece68936e4cafaa82edf58486b769727ab0b3b97a5b0d}"
 # Optional insecure image registry to trust inside kind (host:port). Leave empty when using
@@ -35,16 +36,16 @@ mkdir -p "$BINDIR"; export PATH="$BINDIR:$PATH"
 need() { command -v "$1" >/dev/null; }
 
 if ! need kubectl; then
-  echo ">> Installing kubectl $KUBECTL_VERSION -> $BINDIR"
-  curl -sLo "$BINDIR/kubectl" "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"; chmod +x "$BINDIR/kubectl"
+  echo ">> Installing kubectl $KUBECTL_VERSION ($ARCH) -> $BINDIR"
+  curl -sLo "$BINDIR/kubectl" "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${ARCH}/kubectl"; chmod +x "$BINDIR/kubectl"
 fi
 if ! need kind; then
-  echo ">> Installing kind $KIND_VERSION -> $BINDIR"
-  curl -sLo "$BINDIR/kind" "https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-amd64"; chmod +x "$BINDIR/kind"
+  echo ">> Installing kind $KIND_VERSION ($ARCH) -> $BINDIR"
+  curl -sLo "$BINDIR/kind" "https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-${ARCH}"; chmod +x "$BINDIR/kind"
 fi
 if ! need keadm; then
-  echo ">> Installing keadm $KUBEEDGE_VERSION -> $BINDIR"
-  tmp=$(mktemp -d); curl -sLo "$tmp/k.tgz" "https://github.com/kubeedge/kubeedge/releases/download/${KUBEEDGE_VERSION}/keadm-${KUBEEDGE_VERSION}-linux-amd64.tar.gz"
+  echo ">> Installing keadm $KUBEEDGE_VERSION ($ARCH) -> $BINDIR"
+  tmp=$(mktemp -d); curl -sLo "$tmp/k.tgz" "https://github.com/kubeedge/kubeedge/releases/download/${KUBEEDGE_VERSION}/keadm-${KUBEEDGE_VERSION}-linux-${ARCH}.tar.gz"
   tar xzf "$tmp/k.tgz" -C "$tmp"; cp "$(find "$tmp" -name keadm -type f | head -1)" "$BINDIR/keadm"; chmod +x "$BINDIR/keadm"; rm -rf "$tmp"
 fi
 

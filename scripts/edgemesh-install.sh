@@ -10,7 +10,7 @@
 # Docs: https://edgemesh.netlify.app/guide/  (this is the helm path; pin a chart version)
 set -euo pipefail
 
-CONTEXT="${CONTEXT:-kubeadm-isac}"
+CONTEXT="${CONTEXT:-kind-isac}"
 # PSK secures the EdgeMesh P2P tunnel — generate once and keep it stable across the fleet.
 PSK="${EDGEMESH_PSK:-}"
 # The API server address edgemesh-agent uses to reach k8s metadata (usually the cloud IP).

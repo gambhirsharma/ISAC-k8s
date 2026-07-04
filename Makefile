@@ -47,8 +47,9 @@ keadm-token:
 
 # 4. Join an edge device (run ON the edge device, not here — this just prints the command).
 join-edge:
-	@echo "Run this ON the edge device (needs root + keadm installed):"
-	@echo "  sudo ./scripts/join-edge.sh $(CLOUDCORE_IP) $(EDGE_NODE_NAME) <token> $(REGISTRY)"
+	@echo "Run this ON the edge device:"
+	@echo "  sudo ./scripts/join-edge.sh $(CLOUDCORE_IP) $(EDGE_NODE_NAME) <token> $(REGISTRY)   # Linux (needs root + keadm)"
+	@echo "  ./scripts/join-edge.sh $(CLOUDCORE_IP) $(EDGE_NODE_NAME) <token> $(REGISTRY)        # macOS (needs Docker Desktop)"
 
 # 5. Label an edge node so the edge DaemonSets schedule onto it. `onboard-edge` is the
 # fuller flow (label + wait for the whole hot-path to come up).

@@ -97,9 +97,14 @@ pods stay up.
 
 ## Two flavours of edge node
 
-- **A real device/VM** — join it with
+- **A real device/VM** — grab a token from the cloud host (`make keadm-token`), then join with
   [`scripts/join-edge.sh`](https://github.com/gambhirsharma/ISAC-k8s/blob/main/scripts/join-edge.sh)
-  (installs containerd + keadm + a minimal CNI, then `keadm join`).
+  `<cloudcore-ip> <node-name> <token> [registry]`. It runs a preflight tool/reachability check,
+  installs whatever's missing (containerd, keadm, a minimal CNI), then `keadm join`. Safe to
+  re-run — it detects an already-joined edgecore and skips instead of re-joining. On macOS
+  (no native `edgecore`/`keadm` binaries, no systemd/containerd) it auto-detects the OS and
+  runs the edge node as a privileged `kindest/node` Docker container instead — no Lima VM,
+  no root/sudo required.
 - **A co-located test edge** — a privileged `kindest/node` container on the cloud host, via
   [`scripts/edge-container.sh`](https://github.com/gambhirsharma/ISAC-k8s/blob/main/scripts/edge-container.sh).
   Great for validating the pipeline on one box; it uses the kind node's internal IP for a co-located

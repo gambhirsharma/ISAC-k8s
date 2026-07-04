@@ -11,7 +11,7 @@
 # Sudo-free (uses your Docker). Auto-fetches a join token from the local cloud.
 set -euo pipefail
 
-NODE_NAME="${1:-edge-hetzner}"
+NODE_NAME="${1:-edge-node}"
 CLUSTER_NAME="${CLUSTER_NAME:-isac}"
 CONTEXT="kind-${CLUSTER_NAME}"
 CLOUD_NODE="${CLUSTER_NAME}-control-plane"
@@ -72,7 +72,8 @@ docker exec "$CTR" keadm join \
   --kubeedge-version="$KUBEEDGE_VERSION" \
   --remote-runtime-endpoint=unix:///run/containerd/containerd.sock \
   --cgroupdriver=systemd \
-  --set modules.edgeStream.enable=true
+  --set modules.edgeStream.enable=true \
+  --set modules.metaServer.enable=true
 # keadm starts edgecore via the sudo shim; ensure it's up
 docker exec "$CTR" bash -c 'systemctl enable --now edgecore 2>/dev/null; systemctl is-active edgecore'
 
