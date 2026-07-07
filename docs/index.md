@@ -66,6 +66,18 @@ Start here, then drill into whichever topic you need — each is a standalone de
   - [Latency & clock sync](architecture/latency) — the metric design and its correctness gate.
 - **[Deployment & operations](deployment)** — stand up the cloud, join an edge, run it, view it.
 
+## Repository layout
+
+```
+services/            5 gRPC microservices (+ proto/ contract, codegen.sh)
+cluster/manifests/   k8s manifests (DaemonSets, output, prometheus, grafana)
+cluster/             kind cloud config
+scripts/             cloud-init, join-edge, edge-container, onboard/offboard, edgemesh
+docs/                this documentation site (GitHub Pages)
+Makefile             all lifecycle targets
+SYSTEM-REVIEW.md     latency-focused code/manifest audit + applied fixes
+```
+
 ## Why KubeEdge
 
 `edgecore` replaces a full node agent at **~70 MB idle** (no kube-proxy/etcd) and gives **edge
