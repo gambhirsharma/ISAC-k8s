@@ -15,3 +15,4 @@ venv/
 .vscode/
 *.local.yaml
 /claudecode-v1.md
+.claude/
