@@ -13,7 +13,7 @@ reporting.
 The `simulator` generates synthetic CSI as a stand-in for a future **6G ISAC sensor** — the only
 component swapped for real hardware later; everything downstream is source-agnostic.
 
-![ISAC-k8s architecture](public/ISAC-k8s.png)
+![ISAC-k8s architecture](public/ISAC-diagram-k8s.png)
 
 The KubeEdge topology — edge nodes in the Edge Mesh running the hot-path, fanning in to the CloudCore
 on the kind cluster:
