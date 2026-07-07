@@ -137,12 +137,12 @@ logs-grafana:
 
 # 11. UI access
 port-forward-prometheus:
-	kubectl --context $(CONTEXT) port-forward -n isac-monitoring svc/prometheus 9090:9090
+	kubectl --context $(CONTEXT) port-forward --address 0.0.0.0 -n isac-monitoring svc/prometheus 9090:9090
 port-forward-grafana:
-	kubectl --context $(CONTEXT) port-forward -n isac-monitoring svc/grafana 3000:3000
+	kubectl --context $(CONTEXT) port-forward --address 0.0.0.0 -n isac-monitoring svc/grafana 3000:3000
 port-forward-dashboard:
 	@echo "Fleet dashboard -> http://localhost:8080/"
-	kubectl --context $(CONTEXT) port-forward -n isac-sensing svc/dashboard 8080:8080
+	kubectl --context $(CONTEXT) port-forward --address 0.0.0.0 -n isac-sensing svc/dashboard 8080:8080
 
 dashboard-url:
 	@echo "Fleet dashboard is ClusterIP (unauthenticated) — use: make port-forward-dashboard"

@@ -341,7 +341,11 @@ def main():
     start_http_server(METRICS_PORT)
     threading.Thread(target=connected_gauge_loop, daemon=True).start()
     threading.Thread(target=dashboard_loop, daemon=True).start()
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=8))
+    # 8 was sized for one low-latency edge (docker-bridge). Each StoreResult call now holds
+    # a worker for the RPC's full duration; with a real remote edge (eagle-edge-1, ~600ms
+    # WAN RPC) plus a fast local edge, concurrent in-flight StoreResults can exceed 8,
+    # queueing calls server-side and inflating latency for BOTH edges, not just the slow one.
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=128))
     isac_pb2_grpc.add_OutputServiceServicer_to_server(OutputServicer(), server)
     isac_pb2_grpc.add_ClockSyncServiceServicer_to_server(ClockSyncServicer(), server)
     server.add_insecure_port(f"0.0.0.0:{LISTEN_PORT}")

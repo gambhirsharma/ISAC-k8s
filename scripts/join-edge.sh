@@ -17,6 +17,10 @@
 # containerd) on top of Docker Desktop's own Linux VM. No root/sudo needed on macOS.
 #
 # Skip the reachability preflight (e.g. cloudcore isn't up yet) with SKIP_NET_CHECK=1.
+#
+# Linux hosts can also join as a containerized edge node (same kindest/node trick as macOS)
+# instead of installing edgecore bare-metal on the host — e.g. to run a second/third edge
+# node on a box that already has a native edgecore running. Force it with CONTAINER=1.
 set -euo pipefail
 
 CLOUDCORE_IP="${1:-}"
@@ -28,6 +32,7 @@ KUBEEDGE_VERSION="${KUBEEDGE_VERSION:-v1.23.0}"
 ARCH="${ARCH:-$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')}"
 RUNTIME_ENDPOINT="${RUNTIME_ENDPOINT:-unix:///run/containerd/containerd.sock}"
 SKIP_NET_CHECK="${SKIP_NET_CHECK:-0}"
+CONTAINER="${CONTAINER:-0}"
 DIR="$(cd "$(dirname "$0")" && pwd)"
 OS="$(uname -s)"
 NODE_IMAGE="${NODE_IMAGE:-kindest/node:v1.32.5@sha256:e3b2327e3a5ab8c76f5ece68936e4cafaa82edf58486b769727ab0b3b97a5b0d}"
@@ -70,14 +75,16 @@ reachability_check() {
   fi
 }
 
-# ============================= macOS path =============================
+# ======================= containerized edge path =======================
 # Same container trick as scripts/edge-container.sh, but pointed at a real
 # remote cloudcore (CLOUDCORE_IP/TOKEN from argv) instead of a co-located kind
 # cluster, and driven entirely through `docker exec` (no sudo on the host).
-join_macos() {
-  echo ">> Preflight checks (macOS: edge node runs in a Docker container)"
+# Used on macOS always (no native install path), and on Linux when CONTAINER=1
+# (e.g. running a 2nd edge node on a box that already has a native edgecore).
+join_container() {
+  echo ">> Preflight checks ($OS: edge node runs in a Docker container)"
   ok=1
-  check "OS: Darwin" 1
+  check "OS: $OS" 1
   [[ "$ARCH" == amd64 || "$ARCH" == arm64 ]] && check "arch: $ARCH supported" 1 || check "arch: $ARCH supported" 0
   command -v docker >/dev/null 2>&1 && check "docker" 1 || check "docker (required — install Docker Desktop)" 0
   docker info >/dev/null 2>&1 && check "docker daemon running" 1 || check "docker daemon running (start Docker Desktop)" 0
@@ -145,8 +152,8 @@ join_macos() {
   echo "   Remove:  docker rm -f $CTR"
 }
 
-if [[ "$OS" == Darwin ]]; then
-  join_macos
+if [[ "$OS" == Darwin || "$CONTAINER" == 1 ]]; then
+  join_container
   exit 0
 fi
 

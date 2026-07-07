@@ -32,10 +32,20 @@ spec:
           image: isac-inference:latest
           imagePullPolicy: Always
           env:
-            # Cross-node hop (edge->cloud), the ONLY hop that leaves the node. Resolved by
-            # EdgeMesh; override to <cloud-lan-ip>:<nodeport> for the NodePort fallback.
+            # Cross-node hop (edge->cloud), the ONLY hop that leaves the node. EdgeMesh DNS
+            # ("output:50054") doesn't route from real remote edge hosts (e.g. eagle-edge-1)
+            # to the docker-internal control-plane IP, so pin the NodePort fallback at the
+            # cloud host's Tailscale IP instead (reachable from both docker-bridge edges and
+            # real remote edges over the tailnet).
             - name: OUTPUT_SERVICE
-              value: "output:50054"
+              value: "100.64.5.120:30054"
+            # Default (16) assumes a low-latency link (fine for docker-bridge edges like
+            # edge-hetzner). Real remote edges over WAN/relayed Tailscale see ~600ms per
+            # StoreResult RPC; 16 threads only drains ~26 req/s against a 100Hz simulator,
+            # so the queue (500) fills and frames sit ~19s before being dropped or sent.
+            # 80 threads covers ~100Hz at up to ~800ms RPC latency with margin.
+            - name: OUTPUT_SENDER_THREADS
+              value: "80"
             - name: LISTEN_PORT
               value: "50053"
             - name: METRICS_PORT

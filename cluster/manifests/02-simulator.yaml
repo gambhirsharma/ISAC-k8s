@@ -37,10 +37,12 @@ spec:
             # this node. No Service/kube-proxy needed for the on-node hot path.
             - name: INGESTION_SERVICE
               value: "localhost:50051"
-            # Cross-node hop (edge->cloud). Resolved by EdgeMesh; override to
-            # <cloud-lan-ip>:<nodeport> to use the NodePort fallback instead.
+            # Cross-node hop (edge->cloud). EdgeMesh DNS ("output:50054") doesn't route from
+            # real remote edge hosts (e.g. eagle-edge-1) to the docker-internal control-plane
+            # IP, so pin the NodePort fallback at the cloud host's Tailscale IP instead
+            # (reachable from both docker-bridge edges and real remote edges over the tailnet).
             - name: CLOCK_SYNC_TARGET
-              value: "output:50054"
+              value: "100.64.5.120:30054"
             # Reported to output on each clock probe so it can skew-correct this node's e2e.
             - name: EDGE_NODE_NAME
               valueFrom:
