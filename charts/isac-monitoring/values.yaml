@@ -2,6 +2,13 @@
 # config target it explicitly (cross-namespace, since prometheus lives in isac-monitoring).
 sensingNamespace: isac-sensing
 
+# Keep prometheus/grafana OFF edge nodes (same reasoning as isac-sensing's `output`: the
+# monitoring stack aggregates the whole fleet and shouldn't compete for edge CPU/RAM, and
+# edge nodes aren't guaranteed to reach the image registry / have matching arch).
+edge:
+  nodeSelectorKey: isac-edge
+  nodeSelectorValue: "true"
+
 prometheus:
   image:
     repository: prom/prometheus

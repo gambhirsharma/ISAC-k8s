@@ -26,6 +26,10 @@ spec:
                   - key: {{ .Values.edge.nodeSelectorKey }}
                     operator: NotIn
                     values: [{{ .Values.edge.nodeSelectorValue | quote }}]
+                  # Belt-and-suspenders: exclude any KubeEdge edge node, even one not
+                  # (yet) labeled isac-edge=true (e.g. a joined-but-unlabeled edge host).
+                  - key: node-role.kubernetes.io/edge
+                    operator: DoesNotExist
       containers:
         - name: output
           image: "{{ .Values.registry }}/{{ .Values.output.image.repository }}:{{ .Values.output.image.tag }}"

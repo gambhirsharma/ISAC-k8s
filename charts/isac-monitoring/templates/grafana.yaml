@@ -47,6 +47,19 @@ spec:
       labels:
         app: grafana
     spec:
+      # Keep off edge nodes — see values.yaml `edge` comment.
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: {{ .Values.edge.nodeSelectorKey }}
+                    operator: NotIn
+                    values: [{{ .Values.edge.nodeSelectorValue | quote }}]
+                  # Belt-and-suspenders: exclude any KubeEdge edge node, even one not
+                  # (yet) labeled isac-edge=true (e.g. a joined-but-unlabeled edge host).
+                  - key: node-role.kubernetes.io/edge
+                    operator: DoesNotExist
       containers:
         - name: grafana
           image: "{{ .Values.grafana.image.repository }}:{{ .Values.grafana.image.tag }}"
