@@ -48,8 +48,8 @@ This is the core latency + scalability win, and it's independent of the runtime 
 The four hot-path services are **DaemonSets**, not Deployments. A DaemonSet runs exactly one pod per
 matching node — which is precisely the "add a node → it runs the pipeline" behavior, with no custom
 controller. Each pod spec has three KubeEdge-specific pieces (from
-[`02-simulator.yaml`](https://github.com/gambhirsharma/ISAC-k8s/blob/main/cluster/manifests/02-simulator.yaml)
-and siblings):
+[`daemonset-simulator.yaml`](https://github.com/gambhirsharma/ISAC-k8s/blob/main/charts/isac-sensing/templates/daemonset-simulator.yaml)
+and siblings, in the `isac-sensing` helm chart):
 
 ```yaml
 nodeSelector:

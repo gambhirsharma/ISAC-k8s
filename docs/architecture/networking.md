@@ -51,12 +51,12 @@ de-risks the most failure-prone new component: the critical data hop works indep
 EdgeMesh routing is healthy.
 
 ```yaml
-# 05-inference.yaml — resolved by EdgeMesh, or override to the NodePort
+# charts/isac-sensing/templates/daemonset-inference.yaml — resolved by EdgeMesh, or override to the NodePort
 - name: OUTPUT_SERVICE
   value: "output:50054"
 ```
 
-EdgeMesh is documented as the intended path; the manifests default to naming `output:50054`, and the
+EdgeMesh is documented as the intended path; the chart defaults to naming `output:50054`, and the
 co-located test edge auto-switches to the NodePort fast-path (kind node internal IP) for lower
 overhead.
 
@@ -67,7 +67,7 @@ overhead.
 ## The `output` Services
 
 From
-[`06-output.yaml`](https://github.com/gambhirsharma/ISAC-k8s/blob/main/cluster/manifests/06-output.yaml):
+[`service-output.yaml`](https://github.com/gambhirsharma/ISAC-k8s/blob/main/charts/isac-sensing/templates/service-output.yaml):
 
 - **`output`** — `type: NodePort`, `50054 → :30054`. The one Service the edge resolves cross-node.
 - **`dashboard`** — `type: ClusterIP`, `:8080`. Deliberately *not* a NodePort: the dashboard is

@@ -70,7 +70,7 @@ Start here, then drill into whichever topic you need — each is a standalone de
 
 ```
 services/            5 gRPC microservices (+ proto/ contract, codegen.sh)
-cluster/manifests/   k8s manifests (DaemonSets, output, prometheus, grafana)
+charts/              helm charts (isac-sensing, isac-monitoring)
 cluster/             kind cloud config
 scripts/             cloud-init, join-edge, edge-container, onboard/offboard, edgemesh
 docs/                this documentation site (GitHub Pages)

@@ -32,7 +32,7 @@ timestamp — and it all arrives at `output`. So:
 ![Pipeline dataflow — per-stage timings ride the message](../assets/pipeline.svg)
 
 The Prometheus scrape config
-([`09-prometheus.yaml`](https://github.com/gambhirsharma/ISAC-k8s/blob/main/cluster/manifests/09-prometheus.yaml))
+([`prometheus.yaml`](https://github.com/gambhirsharma/ISAC-k8s/blob/main/charts/isac-monitoring/templates/prometheus.yaml))
 keeps `app=output` and drops everything else:
 
 ```yaml
@@ -91,7 +91,7 @@ see [Latency & clock sync](latency).
 
 `grafana` (`:3000`, admin/admin, anonymous off) auto-provisions a datasource and the **"ISAC Fleet
 (KubeEdge)"** dashboard
-([`10-grafana.yaml`](https://github.com/gambhirsharma/ISAC-k8s/blob/main/cluster/manifests/10-grafana.yaml)),
+([`grafana.yaml`](https://github.com/gambhirsharma/ISAC-k8s/blob/main/charts/isac-monitoring/templates/grafana.yaml)),
 built entirely on the per-node `output` metrics:
 
 | Panel | Shows |

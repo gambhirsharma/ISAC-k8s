@@ -102,7 +102,7 @@ corrected + raw, clock offset, uptime), and a searchable detection log. It's a C
 | `edgemesh` | install EdgeMesh (needs `EDGEMESH_PSK`) |
 | `codegen` | regenerate the proto stubs |
 | `build-images` | multi-arch buildx + push to `REGISTRY` |
-| `namespace` / `deploy` / `clean` | create namespaces / apply manifests + set images / tear down the app |
+| `deploy` / `clean` | helm upgrade --install charts/isac-sensing + charts/isac-monitoring (namespaces auto-created) / helm uninstall |
 | `validate` | show pod placement, Services, node roles/arch |
 | `smoke-test` | throwaway busybox pod on an edge node |
 | `logs-*` | tail each service's logs (edge logs need the stream tunnel) |
