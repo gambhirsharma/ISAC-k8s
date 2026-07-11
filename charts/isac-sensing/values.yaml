@@ -1,0 +1,94 @@
+registry: gambhir
+imagePullPolicy: Always
+
+# KubeEdge: how the DaemonSets target edge nodes (see cluster/manifests history).
+edge:
+  nodeSelectorKey: isac-edge
+  nodeSelectorValue: "true"
+  toleration:
+    key: node-role.kubernetes.io/edge
+    operator: Exists
+    effect: NoSchedule
+
+# Edge -> cloud fallback address (NodePort), used by simulator (clock sync) and inference
+# (DetectionResult fan-in). EdgeMesh DNS doesn't route from real remote edge hosts, so this
+# stays pinned at the cloud host's reachable IP (e.g. Tailscale). Override per environment.
+network:
+  cloudcoreAddr: "100.64.5.120:30054"
+
+simulator:
+  image:
+    repository: isac-simulator
+    tag: latest
+  metricsPort: 8000
+  ingestionService: "localhost:50051"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+ingestion:
+  image:
+    repository: isac-ingestion
+    tag: latest
+  listenPort: 50051
+  metricsPort: 8001
+  preprocessingService: "localhost:50052"
+  resources:
+    requests:
+      cpu: 200m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+preprocessing:
+  image:
+    repository: isac-preprocessing
+    tag: latest
+  listenPort: 50052
+  metricsPort: 8002
+  inferenceService: "localhost:50053"
+  resources:
+    requests:
+      cpu: 200m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+inference:
+  image:
+    repository: isac-inference
+    tag: latest
+  listenPort: 50053
+  metricsPort: 8003
+  senderThreads: 80
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+
+output:
+  image:
+    repository: isac-output
+    tag: latest
+  replicas: 1
+  listenPort: 50054
+  metricsPort: 8004
+  dashboardPort: 8080
+  service:
+    nodePort: 30054
+  resources:
+    requests:
+      cpu: 100m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi

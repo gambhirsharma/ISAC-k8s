@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: ingestion
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+    matchLabels:
+      app: ingestion
+  template:
+    metadata:
+      labels:
+        app: ingestion
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.ingestion.metricsPort }}"
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      nodeSelector:
+        {{ .Values.edge.nodeSelectorKey }}: {{ .Values.edge.nodeSelectorValue | quote }}
+      tolerations:
+        - key: {{ .Values.edge.toleration.key }}
+          operator: {{ .Values.edge.toleration.operator }}
+          effect: {{ .Values.edge.toleration.effect }}
+      containers:
+        - name: ingestion
+          image: "{{ .Values.registry }}/{{ .Values.ingestion.image.repository }}:{{ .Values.ingestion.image.tag }}"
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          env:
+            # Node-local hop over localhost (hostNetwork + DaemonSet). No Service/kube-proxy.
+            - name: PREPROCESSING_SERVICE
+              value: {{ .Values.ingestion.preprocessingService | quote }}
+            - name: LISTEN_PORT
+              value: {{ .Values.ingestion.listenPort | quote }}
+            - name: METRICS_PORT
+              value: {{ .Values.ingestion.metricsPort | quote }}
+          ports:
+            - containerPort: {{ .Values.ingestion.listenPort }}
+              hostPort: {{ .Values.ingestion.listenPort }}
+              name: grpc
+            - containerPort: {{ .Values.ingestion.metricsPort }}
+              name: metrics
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.ingestion.listenPort }}
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: {{ .Values.ingestion.listenPort }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.ingestion.resources | nindent 12 }}
+# No Service for ingestion under KubeEdge: the only client (simulator) is colocated on the
+# same edge node and reaches it via localhost (hostNetwork). A ClusterIP would need
+# kube-proxy (absent on edge) and, via EdgeMesh, could smear frames to another node's pod.
+# The whole node-local hot path is localhost-wired; only `output` keeps a Service (§EdgeMesh).

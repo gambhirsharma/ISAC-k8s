@@ -1,0 +1,40 @@
+# Namespace the isac-sensing chart's pods live in — prometheus RBAC + pod-discovery scrape
+# config target it explicitly (cross-namespace, since prometheus lives in isac-monitoring).
+sensingNamespace: isac-sensing
+
+# Keep prometheus/grafana OFF edge nodes (same reasoning as isac-sensing's `output`: the
+# monitoring stack aggregates the whole fleet and shouldn't compete for edge CPU/RAM, and
+# edge nodes aren't guaranteed to reach the image registry / have matching arch).
+edge:
+  nodeSelectorKey: isac-edge
+  nodeSelectorValue: "true"
+
+prometheus:
+  image:
+    repository: prom/prometheus
+    tag: v2.55.1
+  scrapeInterval: 2s
+  evaluationInterval: 2s
+  retention: 6h
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+grafana:
+  image:
+    repository: grafana/grafana
+    tag: "11.3.0"
+  adminUser: admin
+  adminPassword: admin
+  anonymousEnabled: false
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi

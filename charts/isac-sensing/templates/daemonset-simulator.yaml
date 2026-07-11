@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: simulator
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+    matchLabels:
+      app: simulator
+  template:
+    metadata:
+      labels:
+        app: simulator
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.simulator.metricsPort }}"
+    spec:
+      # KubeEdge: run only on edge nodes. Tolerate the edge node-role taint (present on
+      # some KubeEdge setups) so the DaemonSet can land there; nodeSelector is the on-switch.
+      nodeSelector:
+        {{ .Values.edge.nodeSelectorKey }}: {{ .Values.edge.nodeSelectorValue | quote }}
+      tolerations:
+        - key: {{ .Values.edge.toleration.key }}
+          operator: {{ .Values.edge.toleration.operator }}
+          effect: {{ .Values.edge.toleration.effect }}
+      # hostNetwork so simulator reaches this node's ingestion over localhost (no kube-proxy
+      # on edge under KubeEdge). ClusterFirstWithHostNet keeps cluster DNS working so the
+      # clock-sync probe can still resolve the cross-node `output` service via EdgeMesh.
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+        - name: simulator
+          image: "{{ .Values.registry }}/{{ .Values.simulator.image.repository }}:{{ .Values.simulator.image.tag }}"
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          env:
+            # Node-local hop: DaemonSet = one ingestion pod per node, hostNetwork = localhost is
+            # this node. No Service/kube-proxy needed for the on-node hot path.
+            - name: INGESTION_SERVICE
+              value: {{ .Values.simulator.ingestionService | quote }}
+            # Cross-node hop (edge->cloud). EdgeMesh DNS ("output:50054") doesn't route from
+            # real remote edge hosts (e.g. eagle-edge-1) to the docker-internal control-plane
+            # IP, so pin the NodePort fallback at the cloud host's Tailscale IP instead
+            # (reachable from both docker-bridge edges and real remote edges over the tailnet).
+            - name: CLOCK_SYNC_TARGET
+              value: {{ .Values.network.cloudcoreAddr | quote }}
+            # Reported to output on each clock probe so it can skew-correct this node's e2e.
+            - name: EDGE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: METRICS_PORT
+              value: {{ .Values.simulator.metricsPort | quote }}
+          ports:
+            - containerPort: {{ .Values.simulator.metricsPort }}
+              name: metrics
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.simulator.metricsPort }}
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: {{ .Values.simulator.metricsPort }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.simulator.resources | nindent 12 }}

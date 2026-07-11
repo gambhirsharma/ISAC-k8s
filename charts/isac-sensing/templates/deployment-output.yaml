@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: output
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: {{ .Values.output.replicas }}
+  selector:
+    matchLabels:
+      app: output
+  template:
+    metadata:
+      labels:
+        app: output
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.output.metricsPort }}"
+    spec:
+      # Keep the central collector OFF edge nodes — it aggregates the whole fleet and
+      # shouldn't compete for the edge devices' scarce CPU/RAM.
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: {{ .Values.edge.nodeSelectorKey }}
+                    operator: NotIn
+                    values: [{{ .Values.edge.nodeSelectorValue | quote }}]
+                  # Belt-and-suspenders: exclude any KubeEdge edge node, even one not
+                  # (yet) labeled isac-edge=true (e.g. a joined-but-unlabeled edge host).
+                  - key: node-role.kubernetes.io/edge
+                    operator: DoesNotExist
+      containers:
+        - name: output
+          image: "{{ .Values.registry }}/{{ .Values.output.image.repository }}:{{ .Values.output.image.tag }}"
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          env:
+            - name: LISTEN_PORT
+              value: {{ .Values.output.listenPort | quote }}
+            - name: METRICS_PORT
+              value: {{ .Values.output.metricsPort | quote }}
+            - name: DASHBOARD_PORT
+              value: {{ .Values.output.dashboardPort | quote }}
+          ports:
+            - containerPort: {{ .Values.output.listenPort }}
+              name: grpc
+            - containerPort: {{ .Values.output.metricsPort }}
+              name: metrics
+            - containerPort: {{ .Values.output.dashboardPort }}
+              name: dashboard
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.output.listenPort }}
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: {{ .Values.output.listenPort }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.output.resources | nindent 12 }}

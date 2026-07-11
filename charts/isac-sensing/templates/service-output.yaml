@@ -1,0 +1,38 @@
+# output fan-in Service. Under KubeEdge this is the one Service the edge hot-path resolves
+# cross-node. EdgeMesh proxies edge->cloud to the ClusterIP; the NodePort is the
+# env-overridable fallback (point edge OUTPUT_SERVICE/CLOCK_SYNC_TARGET at
+# <cloud-lan-ip>:<nodePort> if EdgeMesh routing isn't available).
+apiVersion: v1
+kind: Service
+metadata:
+  name: output
+  namespace: {{ .Release.Namespace }}
+spec:
+  type: NodePort
+  selector:
+    app: output
+  ports:
+    - port: {{ .Values.output.listenPort }}
+      targetPort: {{ .Values.output.listenPort }}
+      nodePort: {{ .Values.output.service.nodePort }}
+      name: grpc
+---
+# Separate Service for the human-facing web dashboard (edge-node count + log view).
+# ClusterIP (not NodePort): the dashboard is unauthenticated, so it must NOT be
+# exposed on a node port reachable from outside the cluster. Reach it with
+# `make port-forward-dashboard` (kubectl port-forward -> http://localhost:8080/).
+# If you need LAN access without a port-forward, front it with an authenticated
+# ingress/reverse-proxy rather than switching back to NodePort.
+apiVersion: v1
+kind: Service
+metadata:
+  name: dashboard
+  namespace: {{ .Release.Namespace }}
+spec:
+  type: ClusterIP
+  selector:
+    app: output
+  ports:
+    - port: {{ .Values.output.dashboardPort }}
+      targetPort: {{ .Values.output.dashboardPort }}
+      name: dashboard
