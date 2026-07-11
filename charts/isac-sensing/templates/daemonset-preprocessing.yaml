@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: preprocessing
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+    matchLabels:
+      app: preprocessing
+  template:
+    metadata:
+      labels:
+        app: preprocessing
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.preprocessing.metricsPort }}"
+    spec:
+      # DaemonSet + nodeSelector puts one preprocessing pod on every edge node,
+      # colocated with that node's ingestion/inference.
+      nodeSelector:
+        {{ .Values.edge.nodeSelectorKey }}: {{ .Values.edge.nodeSelectorValue | quote }}
+      tolerations:
+        - key: {{ .Values.edge.toleration.key }}
+          operator: {{ .Values.edge.toleration.operator }}
+          effect: {{ .Values.edge.toleration.effect }}
+      # hostNetwork so ingestion reaches it on localhost and it reaches this node's
+      # inference on localhost (no kube-proxy on edge).
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+        - name: preprocessing
+          image: "{{ .Values.registry }}/{{ .Values.preprocessing.image.repository }}:{{ .Values.preprocessing.image.tag }}"
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          env:
+            # Node-local hop over localhost.
+            - name: INFERENCE_SERVICE
+              value: {{ .Values.preprocessing.inferenceService | quote }}
+            - name: LISTEN_PORT
+              value: {{ .Values.preprocessing.listenPort | quote }}
+            - name: METRICS_PORT
+              value: {{ .Values.preprocessing.metricsPort | quote }}
+          ports:
+            - containerPort: {{ .Values.preprocessing.listenPort }}
+              name: grpc
+            - containerPort: {{ .Values.preprocessing.metricsPort }}
+              name: metrics
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.preprocessing.listenPort }}
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: {{ .Values.preprocessing.listenPort }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.preprocessing.resources | nindent 12 }}
+# No Service: only client is this node's ingestion, over localhost (hostNetwork).

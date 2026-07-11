@@ -1,0 +1,6 @@
+apiVersion: v2
+name: isac-monitoring
+description: Prometheus + Grafana observability stack for the ISAC pipeline (KubeEdge cloud-side)
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

@@ -1,5 +1,5 @@
 .PHONY: all codegen cloud-init edge-container edgemesh keadm-token join-edge label-edge onboard-edge offboard-edge \
-	namespace build-images deploy validate smoke-test clean \
+	build-images deploy validate helm-lint smoke-test clean \
 	logs-simulator logs-ingestion logs-preprocessing logs-inference logs-output logs-prometheus logs-grafana \
 	port-forward-prometheus port-forward-grafana port-forward-dashboard dashboard-url
 
@@ -19,7 +19,7 @@ CLOUDCORE_IP ?=
 # The kubeadm cloud cluster, cloudcore, and each edgecore join are one-time host-level
 # steps (need root, run on specific hosts). `cloud-init` / `join-edge` wrap them; they are
 # NOT part of `all`, which only (re)deploys the app onto an already-running KubeEdge cluster.
-all: namespace build-images deploy
+all: build-images deploy
 
 # 1. Generate protobuf code
 codegen:
@@ -63,10 +63,6 @@ offboard-edge:
 	kubectl --context $(CONTEXT) label node $(EDGE_NODE_NAME) isac-edge- || true
 	@echo "Node $(EDGE_NODE_NAME) unlabeled; edge pods will be removed from it."
 
-# 6. Create namespaces
-namespace:
-	kubectl --context $(CONTEXT) apply -f cluster/manifests/01-namespace.yaml
-
 # 7. Multi-arch build + push. Every node pulls from a registry reachable over the LAN.
 build-images: codegen
 	@echo "Building + pushing multi-arch images to $(REGISTRY)..."
@@ -76,22 +72,18 @@ build-images: codegen
 	cd services && docker buildx build --platform linux/amd64,linux/arm64 -t $(REGISTRY)/isac-inference:latest -f inference/Dockerfile --push .
 	cd services && docker buildx build --platform linux/amd64,linux/arm64 -t $(REGISTRY)/isac-output:latest -f output/Dockerfile --push .
 
-# 8. Deploy all manifests, then point them at $(REGISTRY). No 07-network-policies (Cilium
-# is gone under KubeEdge). Edge DaemonSets stay 0 pods until a node is labeled isac-edge=true.
+# 8. Deploy via helm (charts/isac-sensing, charts/isac-monitoring), pointing images at
+# $(REGISTRY). No 07-network-policies (Cilium is gone under KubeEdge). Edge DaemonSets stay
+# 0 pods until a node is labeled isac-edge=true. Override edge->cloud fallback address with
+# e.g. `make deploy CLOUDCORE_NODEPORT_ADDR=100.64.5.120:30054`.
+CLOUDCORE_NODEPORT_ADDR ?= 100.64.5.120:30054
 deploy:
-	kubectl --context $(CONTEXT) apply -f cluster/manifests/02-simulator.yaml
-	kubectl --context $(CONTEXT) apply -f cluster/manifests/03-ingestion.yaml
-	kubectl --context $(CONTEXT) apply -f cluster/manifests/04-preprocessing.yaml
-	kubectl --context $(CONTEXT) apply -f cluster/manifests/05-inference.yaml
-	kubectl --context $(CONTEXT) apply -f cluster/manifests/06-output.yaml
-	kubectl --context $(CONTEXT) apply -f cluster/manifests/08-monitoring-rbac.yaml
-	kubectl --context $(CONTEXT) apply -f cluster/manifests/09-prometheus.yaml
-	kubectl --context $(CONTEXT) apply -f cluster/manifests/10-grafana.yaml
-	kubectl --context $(CONTEXT) set image daemonset/simulator simulator=$(REGISTRY)/isac-simulator:latest -n isac-sensing
-	kubectl --context $(CONTEXT) set image daemonset/ingestion ingestion=$(REGISTRY)/isac-ingestion:latest -n isac-sensing
-	kubectl --context $(CONTEXT) set image daemonset/preprocessing preprocessing=$(REGISTRY)/isac-preprocessing:latest -n isac-sensing
-	kubectl --context $(CONTEXT) set image daemonset/inference inference=$(REGISTRY)/isac-inference:latest -n isac-sensing
-	kubectl --context $(CONTEXT) set image deployment/output output=$(REGISTRY)/isac-output:latest -n isac-sensing
+	helm --kube-context $(CONTEXT) upgrade --install isac-sensing charts/isac-sensing \
+	  -n isac-sensing --create-namespace \
+	  --set registry=$(REGISTRY) \
+	  --set network.cloudcoreAddr=$(CLOUDCORE_NODEPORT_ADDR)
+	helm --kube-context $(CONTEXT) upgrade --install isac-monitoring charts/isac-monitoring \
+	  -n isac-monitoring --create-namespace
 	@echo "--- Waiting for cloud-side pods (edge pods need a labeled node first) ---"
 	kubectl --context $(CONTEXT) wait --for=condition=ready pod -l app=output -n isac-sensing --timeout=120s || true
 	kubectl --context $(CONTEXT) wait --for=condition=ready pod -l app=prometheus -n isac-monitoring --timeout=120s || true
@@ -100,7 +92,7 @@ deploy:
 	kubectl --context $(CONTEXT) get pods -n isac-monitoring -o wide
 
 # 9. Check placement + node roles.
-validate:
+validate: helm-lint
 	@echo "=== Pod placement ==="
 	kubectl --context $(CONTEXT) get pods -n isac-sensing -o wide
 	@echo ""
@@ -112,6 +104,12 @@ validate:
 	@echo ""
 	@echo "=== Nodes, arch, edge label/role ==="
 	kubectl --context $(CONTEXT) get nodes -o wide --show-labels | grep -E 'isac-edge|node-role.kubernetes.io/edge|ARCH' || true
+
+# Lint + dry-run render both charts (catches template errors before touching the cluster).
+helm-lint:
+	helm lint charts/isac-sensing charts/isac-monitoring
+	helm template isac-sensing charts/isac-sensing -n isac-sensing >/dev/null
+	helm template isac-monitoring charts/isac-monitoring -n isac-monitoring >/dev/null
 
 # Throwaway pod on an edge node, before trusting it with real services.
 smoke-test:
@@ -151,6 +149,8 @@ dashboard-url:
 # 12. Tear down the app (not the cluster/cloudcore — those are real infra; uninstall with
 # `keadm reset` on the respective hosts if you actually want to tear KubeEdge down).
 clean:
+	helm --kube-context $(CONTEXT) uninstall isac-sensing -n isac-sensing || true
+	helm --kube-context $(CONTEXT) uninstall isac-monitoring -n isac-monitoring || true
 	kubectl --context $(CONTEXT) delete namespace isac-sensing --ignore-not-found
 	kubectl --context $(CONTEXT) delete namespace isac-monitoring --ignore-not-found
 	rm -f services/proto/isac_pb2.py services/proto/isac_pb2_grpc.py

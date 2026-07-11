@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: inference
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+    matchLabels:
+      app: inference
+  template:
+    metadata:
+      labels:
+        app: inference
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.inference.metricsPort }}"
+    spec:
+      # Inference runs ON each edge node — the whole detection hot-path is node-local, so
+      # only the DetectionResult crosses the network to the central `output` collector.
+      nodeSelector:
+        {{ .Values.edge.nodeSelectorKey }}: {{ .Values.edge.nodeSelectorValue | quote }}
+      tolerations:
+        - key: {{ .Values.edge.toleration.key }}
+          operator: {{ .Values.edge.toleration.operator }}
+          effect: {{ .Values.edge.toleration.effect }}
+      # hostNetwork so preprocessing reaches it on localhost. ClusterFirstWithHostNet
+      # keeps cluster DNS so EdgeMesh can resolve the cross-node `output` service.
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+        - name: inference
+          image: "{{ .Values.registry }}/{{ .Values.inference.image.repository }}:{{ .Values.inference.image.tag }}"
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          env:
+            # Cross-node hop (edge->cloud), the ONLY hop that leaves the node. EdgeMesh DNS
+            # ("output:50054") doesn't route from real remote edge hosts (e.g. eagle-edge-1)
+            # to the docker-internal control-plane IP, so pin the NodePort fallback at the
+            # cloud host's Tailscale IP instead (reachable from both docker-bridge edges and
+            # real remote edges over the tailnet).
+            - name: OUTPUT_SERVICE
+              value: {{ .Values.network.cloudcoreAddr | quote }}
+            # Default (16) assumes a low-latency link (fine for docker-bridge edges like
+            # edge-hetzner). Real remote edges over WAN/relayed Tailscale see ~600ms per
+            # StoreResult RPC; 16 threads only drains ~26 req/s against a 100Hz simulator,
+            # so the queue (500) fills and frames sit ~19s before being dropped or sent.
+            # 80 threads covers ~100Hz at up to ~800ms RPC latency with margin.
+            - name: OUTPUT_SENDER_THREADS
+              value: {{ .Values.inference.senderThreads | quote }}
+            - name: LISTEN_PORT
+              value: {{ .Values.inference.listenPort | quote }}
+            - name: METRICS_PORT
+              value: {{ .Values.inference.metricsPort | quote }}
+            # Origin edge node, stamped onto every DetectionResult for the fleet dashboard.
+            - name: EDGE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          ports:
+            - containerPort: {{ .Values.inference.listenPort }}
+              name: grpc
+            - containerPort: {{ .Values.inference.metricsPort }}
+              name: metrics
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.inference.listenPort }}
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: {{ .Values.inference.listenPort }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.inference.resources | nindent 12 }}
+# No Service: only client is this node's preprocessing, over localhost (hostNetwork).
