@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="public/ISAC-k8s-logo.png" alt="ISAC-k8s logo" width="160">
+  <img src="docs/public/ISAC-k8s-logo.png" alt="ISAC-k8s logo" width="160">
 </p>
 
 <h1 align="center">ISAC-k8s</h1>
@@ -25,7 +25,7 @@ label it → its pipeline auto-schedules and starts reporting.
 The `simulator` generates synthetic CSI as a stand-in for a future **6G ISAC sensor** — the only
 component swapped for real hardware later; everything downstream is source-agnostic.
 
-![ISAC-k8s architecture](public/ISAC-diagram-k8s.png)
+![ISAC-k8s architecture](docs/public/ISAC-diagram-k8s.png)
 
 ## Quickstart
 
